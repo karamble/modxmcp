@@ -172,6 +172,21 @@ $menu->fromArray([
 $menu->save();
 echo "menu: Components > MCP Server\n";
 
+// -------------------------------------------------------------------- event
+
+use MODX\Revolution\modEvent;
+
+// Registering the event is what lets a third-party plugin bind to it at all.
+$event = $modx->getObject(modEvent::class, ['name' => 'OnMCPRegisterTools'])
+    ?: $modx->newObject(modEvent::class);
+$event->fromArray([
+    'name'      => 'OnMCPRegisterTools',
+    'service'   => 6,          // system events
+    'groupname' => 'modxmcp',
+], '', true, true);
+$event->save();
+echo "event: OnMCPRegisterTools\n";
+
 // ------------------------------------------------------------------ snippet
 
 $code = file_get_contents(MODX_CORE_PATH . 'components/modxmcp/elements/snippets/modxmcp.snippet.php');

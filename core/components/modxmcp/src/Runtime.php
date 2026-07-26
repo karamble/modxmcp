@@ -79,8 +79,60 @@ final class Runtime
         // Maintenance
         $registry->register(new Tools\CacheRefreshTool());
 
-        // M5 opens this to third-party extras via OnMCPRegisterTools.
+        self::registerAdapters($modx, $registry);
+        self::invokeRegistrationEvent($modx, $registry);
 
         return $registry;
+    }
+
+    /**
+     * First-party adapters, each registering only if its extra is installed.
+     *
+     * These encode rules that discovery can never surface, because they live in
+     * extras' event handlers and config blobs rather than in any schema.
+     */
+    private static function registerAdapters(modX $modx, ToolRegistry $registry): void
+    {
+        $adapters = [
+            new Adapters\CollectionsAdapter(),
+            new Adapters\SeoSuiteAdapter(),
+            new Adapters\MigxAdapter(),
+        ];
+
+        foreach ($adapters as $adapter) {
+            try {
+                if ($adapter->supports($modx)) {
+                    $adapter->register($registry);
+                }
+            } catch (\Throwable $e) {
+                // One adapter misbehaving must not cost the caller every tool.
+                $modx->log(modX::LOG_LEVEL_ERROR,
+                    'modxmcp: adapter ' . $adapter->extra() . ' failed to register: ' . $e->getMessage());
+            }
+        }
+    }
+
+    /**
+     * Let third-party extras contribute tools.
+     *
+     * The registry is passed as an object, so a plugin registers by calling
+     * $scriptProperties['registry']->register(new MyTool()) with a class
+     * implementing MODXMCP\Registry\ToolInterface.
+     *
+     * Wrapped because a plugin here is arbitrary third-party code running on
+     * every MCP request: a fatal in someone's plugin must degrade to "their
+     * tools are missing", never to a dead endpoint.
+     */
+    private static function invokeRegistrationEvent(modX $modx, ToolRegistry $registry): void
+    {
+        try {
+            $modx->invokeEvent('OnMCPRegisterTools', [
+                'registry' => $registry,
+                'modx'     => $modx,
+            ]);
+        } catch (\Throwable $e) {
+            $modx->log(modX::LOG_LEVEL_ERROR,
+                'modxmcp: a plugin on OnMCPRegisterTools threw: ' . $e->getMessage());
+        }
     }
 }
