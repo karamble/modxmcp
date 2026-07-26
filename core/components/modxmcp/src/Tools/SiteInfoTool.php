@@ -107,10 +107,17 @@ final class SiteInfoTool implements ToolInterface
             'warnings'     => $warnings,
             'bound_user'   => $modx->user ? $modx->user->get('username') : null,
             // Proof, on every call, that the session-free contract still holds.
-            'session'      => [
-                'state'      => $modx->getSessionState(),
-                'php_sid'    => session_id(),
+            //
+            // cookieless is the signal that matters. modx_state is MODX's own
+            // cached flag and is deliberately NOT authoritative here: on the
+            // snippet route it still reads INITIALIZED(1) after teardown,
+            // because getSessionState() short-circuits on that value and never
+            // re-checks. An empty PHP session id and no Set-Cookie on the
+            // response are what actually establish the contract.
+            'session' => [
                 'cookieless' => session_id() === '',
+                'php_sid'    => session_id(),
+                'modx_state' => $modx->getSessionState(),
             ],
         ];
     }

@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Regenerate with:  php dev/build-model.php <path to core/components/modxmcp>
+
+    The generator must be given namespacePrefix="MODXMCP" as a parseSchema()
+    OPTION, not as an attribute here: xPDOGenerator reads it from $options, and
+    an attribute on this element is silently ignored. Without it the classes are
+    emitted to src/MODXMCP/Model/ instead of src/Model/, which no longer matches
+    the MODXMCP\ -> src/ autoloader mapping.
+-->
+<model package="MODXMCP\Model"
+       baseClass="xPDO\Om\xPDOObject"
+       platform="mysql"
+       defaultEngine="InnoDB"
+       phpdoc-package="modxmcp"
+       version="3.0">
+
+    <!--
+        An issued API token.
+
+        The token itself is never stored. It is formatted as
+
+            mcp_<prefix>_<secret>
+
+        where <prefix> is a non-secret, indexed lookup key and <secret> is the
+        part that is hashed. Hashes are salted, so they cannot be queried
+        directly; the prefix narrows the lookup to a single row before the one
+        constant-time verification is performed.
+    -->
+    <object class="ModxmcpToken" table="modxmcp_token" extends="xPDO\Om\xPDOSimpleObject">
+        <field key="name" dbtype="varchar" precision="100" phptype="string" null="false" default="" />
+        <field key="token_prefix" dbtype="varchar" precision="16" phptype="string" null="false" default="" index="index" />
+        <field key="token_hash" dbtype="varchar" precision="255" phptype="string" null="false" default="" />
+        <field key="user_id" dbtype="int" precision="10" attributes="unsigned" phptype="integer" null="false" default="0" index="index" />
+        <field key="scopes" dbtype="text" phptype="json" null="true" />
+        <field key="active" dbtype="tinyint" precision="1" attributes="unsigned" phptype="boolean" null="false" default="0" index="index" />
+        <field key="expires_at" dbtype="datetime" phptype="datetime" null="true" />
+        <field key="ip_allowlist" dbtype="text" phptype="string" null="true" />
+        <field key="last_used_at" dbtype="datetime" phptype="datetime" null="true" />
+        <field key="last_used_ip" dbtype="varchar" precision="45" phptype="string" null="true" />
+        <field key="createdon" dbtype="datetime" phptype="datetime" null="true" />
+        <field key="createdby" dbtype="int" precision="10" attributes="unsigned" phptype="integer" null="false" default="0" />
+
+        <index alias="token_prefix" name="token_prefix" primary="false" unique="true" type="BTREE">
+            <column key="token_prefix" length="" collation="A" null="false" />
+        </index>
+        <index alias="user_id" name="user_id" primary="false" unique="false" type="BTREE">
+            <column key="user_id" length="" collation="A" null="false" />
+        </index>
+        <index alias="active" name="active" primary="false" unique="false" type="BTREE">
+            <column key="active" length="" collation="A" null="false" />
+        </index>
+
+        <aggregate alias="User" class="MODX\Revolution\modUser" local="user_id" foreign="id" cardinality="one" owner="foreign" />
+    </object>
+
+    <!--
+        One row per MCP call. This is both the security record and the answer to
+        "what did the agent actually do", so it records the outcome of rejected
+        calls as well as successful ones.
+
+        Arguments are stored as JSON and may contain content the caller sent, so
+        the retention setting matters; the CMP surfaces it.
+    -->
+    <object class="ModxmcpAudit" table="modxmcp_audit" extends="xPDO\Om\xPDOSimpleObject">
+        <field key="token_id" dbtype="int" precision="10" attributes="unsigned" phptype="integer" null="false" default="0" index="index" />
+        <field key="user_id" dbtype="int" precision="10" attributes="unsigned" phptype="integer" null="false" default="0" index="index" />
+        <field key="ip" dbtype="varchar" precision="45" phptype="string" null="true" />
+        <field key="rpc_method" dbtype="varchar" precision="64" phptype="string" null="false" default="" index="index" />
+        <field key="tool" dbtype="varchar" precision="128" phptype="string" null="true" index="index" />
+        <field key="arguments" dbtype="mediumtext" phptype="string" null="true" />
+        <field key="success" dbtype="tinyint" precision="1" attributes="unsigned" phptype="boolean" null="false" default="0" index="index" />
+        <field key="error_code" dbtype="int" precision="11" phptype="integer" null="true" />
+        <field key="error_message" dbtype="text" phptype="string" null="true" />
+        <field key="duration_ms" dbtype="int" precision="10" attributes="unsigned" phptype="integer" null="false" default="0" />
+        <field key="createdon" dbtype="datetime" phptype="datetime" null="true" index="index" />
+
+        <index alias="createdon" name="createdon" primary="false" unique="false" type="BTREE">
+            <column key="createdon" length="" collation="A" null="false" />
+        </index>
+        <index alias="token_id" name="token_id" primary="false" unique="false" type="BTREE">
+            <column key="token_id" length="" collation="A" null="false" />
+        </index>
+
+        <aggregate alias="Token" class="MODXMCP\Model\ModxmcpToken" local="token_id" foreign="id" cardinality="one" owner="foreign" />
+    </object>
+
+</model>

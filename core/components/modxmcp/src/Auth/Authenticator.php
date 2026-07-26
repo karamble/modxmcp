@@ -23,32 +23,8 @@ use MODXMCP\Protocol\McpException;
  */
 final class Authenticator
 {
-    /**
-     * Verify a bearer token against a stored hash.
-     *
-     * Runs before MODX is bootstrapped so that unauthenticated traffic never
-     * costs a full CMS init. When tokens move to the modxmcp_token table in M2
-     * this ordering flips, and the bootstrap has to happen first.
-     *
-     * @param array<string,mixed> $config
-     * @throws McpException
-     */
-    public function verifyToken(?string $authorizationHeader, array $config): void
-    {
-        if (empty($config['enabled'])) {
-            throw McpException::unavailable('modxmcp is disabled');
-        }
-
-        $header = $authorizationHeader ?? '';
-        $token  = (stripos($header, 'Bearer ') === 0) ? substr($header, 7) : '';
-
-        $hash = (string) ($config['token_hash'] ?? '');
-        if ($token === '' || $hash === '' || !password_verify($token, $hash)) {
-            // password_verify is already constant-time for the comparison; the
-            // early returns above only leak whether the server is configured.
-            throw McpException::unauthorized();
-        }
-    }
+    // Token verification lives in TokenService: it needs the database, so it
+    // cannot run before MODX is up the way the M1 file-based config did.
 
     /**
      * Bind the MODX user the token acts as, in the mgr context, without

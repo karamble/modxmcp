@@ -3,7 +3,10 @@
 namespace MODXMCP;
 
 use MODX\Revolution\modX;
+use MODXMCP\Audit\AuditLogger;
 use MODXMCP\Auth\Authenticator;
+use MODXMCP\Auth\TokenService;
+use MODXMCP\Model\ModxmcpToken;
 use MODXMCP\Protocol\Errors;
 use MODXMCP\Protocol\HttpTransport;
 use MODXMCP\Protocol\McpException;
@@ -13,129 +16,140 @@ use MODXMCP\Protocol\V20260728;
 use MODXMCP\Registry\ToolRegistry;
 
 /**
- * Request orchestration: preflight, parse, validate, authenticate, dispatch.
+ * Request orchestration: preflight, parse, validate, authenticate, dispatch,
+ * audit.
  *
  * The ordering is the design. Transport checks run before any JSON is parsed,
- * protocol validation before authentication, and authentication before MODX is
- * bootstrapped, so an unauthenticated caller never costs a full CMS init.
+ * and protocol validation before authentication, so a malformed or
+ * wrong-version request is rejected without touching the database.
  */
 final class Server
 {
     public const NAME    = 'modxmcp';
-    public const VERSION = '0.2.0';
+    public const VERSION = '0.3.0';
 
+    private modX $modx;
     private HttpTransport $transport;
     private V20260728 $protocol;
+    private TokenService $tokens;
     private Authenticator $auth;
     private ToolRegistry $tools;
+    private AuditLogger $audit;
 
-    /** @var array<string,mixed> */
-    private array $config;
-
-    /**
-     * @param array<string,mixed> $config
-     */
     public function __construct(
+        modX $modx,
         HttpTransport $transport,
         V20260728 $protocol,
+        TokenService $tokens,
         Authenticator $auth,
         ToolRegistry $tools,
-        array $config
+        AuditLogger $audit
     ) {
+        $this->modx      = $modx;
         $this->transport = $transport;
         $this->protocol  = $protocol;
+        $this->tokens    = $tokens;
         $this->auth      = $auth;
         $this->tools     = $tools;
-        $this->config    = $config;
+        $this->audit     = $audit;
     }
 
     public function run(): void
     {
+        $startedAt = microtime(true);
+
         if ($this->transport->rejectedByPreflight()) {
             return;
         }
 
-        $id = null;
+        $id      = null;
+        $request = null;
+        $token   = null;
+
         try {
+            if (!$this->modx->getOption('modxmcp.enabled', null, false)) {
+                throw McpException::unavailable('modxmcp is disabled');
+            }
+
             $request = Request::fromJson($this->transport->body());
             $id      = $request->id();
 
             $this->protocol->validate($request, $this->transport);
-            $this->auth->verifyToken($this->transport->header('Authorization'), $this->config);
 
-            $modx = Bootstrap::modx();
-            $this->auth->bindUser($modx, (int) ($this->config['user_id'] ?? 0));
+            $token = $this->tokens->verify(
+                $this->modx,
+                $this->transport->header('Authorization'),
+                $this->clientIp()
+            );
+            $this->auth->bindUser($this->modx, (int) $token->get('user_id'));
 
             // This revision defines no client-to-server notifications over
-            // Streamable HTTP, but the transport rule still applies: an accepted
+            // Streamable HTTP, but the transport rule stands: an accepted
             // notification is answered 202 with no body.
             if ($request->isNotification()) {
                 $this->transport->emit(202, null);
+                $this->record($request, $token, true, null, $startedAt);
                 return;
             }
 
-            $this->dispatch($modx, $request);
+            $result = $this->dispatch($request, $token);
+            $this->transport->emitResult($id, $result);
+            $this->record($request, $token, true, null, $startedAt);
         } catch (McpException $e) {
             $this->transport->emitException($e, $id);
+            $this->record($request, $token, false, $e, $startedAt);
         } catch (\Throwable $e) {
-            // Never leak internals to an unauthenticated or semi-trusted caller.
-            error_log('modxmcp: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+            // Never leak internals to a caller that may not be authenticated.
+            $this->modx->log(modX::LOG_LEVEL_ERROR,
+                'modxmcp: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
             $this->transport->emitError(500, $id, Errors::INTERNAL, 'Internal error');
+            $this->record($request, $token, false,
+                new McpException(500, Errors::INTERNAL, 'Internal error'), $startedAt);
         }
     }
 
     /**
+     * @return array<string,mixed>|\stdClass
      * @throws McpException
      */
-    private function dispatch(modX $modx, Request $request): void
+    private function dispatch(Request $request, ModxmcpToken $token)
     {
         switch ($request->method()) {
             case 'server/discover':
-                $this->transport->emitResult($request->id(), $this->discoverResult());
-                return;
+                return $this->discoverResult();
 
             case 'ping':
                 // Must encode as {}, so it cannot be an array.
-                $this->transport->emitResult($request->id(), new \stdClass());
-                return;
+                return new \stdClass();
 
             case 'tools/list':
-                $this->transport->emitResult($request->id(), ['tools' => $this->tools->definitions()]);
-                return;
+                return ['tools' => $this->tools->definitions()];
 
             case 'tools/call':
-                $name = (string) $request->param('name', '');
                 $args = $request->param('arguments', []);
-                $result = $this->tools->call(
-                    $modx,
-                    $name,
+                return $this->tools->call(
+                    $this->modx,
+                    (string) $request->param('name', ''),
                     is_array($args) ? $args : [],
-                    $this->grantedScopes()
+                    $this->tokens->scopesOf($token)
                 );
-                $this->transport->emitResult($request->id(), $result);
-                return;
 
-            // Declared so clients that probe them get a clean empty answer rather
-            // than a 404. Populated in M3 and M5.
+            // Answered rather than 404'd so a probing client gets a clean empty
+            // list. Populated in M3 and M5.
             case 'resources/list':
-                $this->transport->emitResult($request->id(), ['resources' => []]);
-                return;
+                return ['resources' => []];
 
             case 'resources/templates/list':
-                $this->transport->emitResult($request->id(), ['resourceTemplates' => []]);
-                return;
+                return ['resourceTemplates' => []];
 
             case 'prompts/list':
-                $this->transport->emitResult($request->id(), ['prompts' => []]);
-                return;
+                return ['prompts' => []];
 
             case 'resources/read':
-                throw McpException::invalidParams(
-                    'Unknown resource: ' . (string) $request->param('uri', ''));
+                throw McpException::invalidParams('Unknown resource: ' . (string) $request->param('uri', ''));
 
             case 'prompts/get':
-                throw McpException::invalidParams(
-                    'Unknown prompt: ' . (string) $request->param('name', ''));
+                throw McpException::invalidParams('Unknown prompt: ' . (string) $request->param('name', ''));
 
             default:
                 // Unknown method is 404 in this revision: that is how a client
@@ -162,10 +176,46 @@ final class Server
         ];
     }
 
-    /** @return string[] */
-    private function grantedScopes(): array
+    private function record(
+        ?Request $request,
+        ?ModxmcpToken $token,
+        bool $success,
+        ?McpException $error,
+        float $startedAt
+    ): void {
+        $this->audit->record($this->modx, [
+            'token_id'      => $token ? (int) $token->get('id') : 0,
+            'user_id'       => $token ? (int) $token->get('user_id') : 0,
+            'ip'            => $this->clientIp(),
+            'rpc_method'    => $request ? $request->method() : '',
+            'tool'          => $request && $request->method() === 'tools/call'
+                ? (string) $request->param('name', '') : null,
+            'arguments'     => $request ? $request->param('arguments') : null,
+            'success'       => $success,
+            'error_code'    => $error ? $error->getCode() : null,
+            'error_message' => $error ? $error->getMessage() : null,
+            'duration_ms'   => (int) round((microtime(true) - $startedAt) * 1000),
+        ]);
+    }
+
+    /**
+     * The client address, honouring a proxy header only when the site is
+     * configured to trust one. Believing X-Forwarded-For unconditionally would
+     * let any caller forge the address recorded in the audit log and defeat a
+     * token's IP allowlist.
+     */
+    private function clientIp(): string
     {
-        $scopes = $this->config['scopes'] ?? ['read'];
-        return is_array($scopes) ? array_values(array_map('strval', $scopes)) : ['read'];
+        $trusted = trim((string) $this->modx->getOption('modxmcp.trusted_proxy_header', null, ''));
+        if ($trusted !== '') {
+            $value = $this->transport->header($trusted);
+            if ($value !== null && $value !== '') {
+                $first = trim(explode(',', $value)[0]);
+                if (filter_var($first, FILTER_VALIDATE_IP)) {
+                    return $first;
+                }
+            }
+        }
+        return (string) ($_SERVER['REMOTE_ADDR'] ?? '');
     }
 }
