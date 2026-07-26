@@ -127,6 +127,32 @@ foreach ($settings as $key => $def) {
     echo "setting: {$key}\n";
 }
 
+// -------------------------------------------------------- namespace + menu
+
+use MODX\Revolution\modNamespace;
+use MODX\Revolution\modMenu;
+
+$ns = $modx->getObject(modNamespace::class, ['name' => 'modxmcp']) ?: $modx->newObject(modNamespace::class);
+$ns->fromArray([
+    'name'       => 'modxmcp',
+    'path'       => '{core_path}components/modxmcp/',
+    'assets_path'=> '{assets_path}components/modxmcp/',
+], '', true, true);
+$ns->save();
+echo "namespace: modxmcp\n";
+
+$menu = $modx->getObject(modMenu::class, ['text' => 'modxmcp']) ?: $modx->newObject(modMenu::class);
+$menu->fromArray([
+    'text'        => 'modxmcp',
+    'parent'      => 'components',
+    'description' => 'modxmcp.menu.desc',
+    'action'      => 'home',
+    'namespace'   => 'modxmcp',
+    'menuindex'   => 0,
+], '', true, true);
+$menu->save();
+echo "menu: Components > MCP Server\n";
+
 // ------------------------------------------------------------------ snippet
 
 $code = file_get_contents(MODX_CORE_PATH . 'components/modxmcp/elements/snippets/modxmcp.snippet.php');

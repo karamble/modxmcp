@@ -1,0 +1,43 @@
+.modxmcp-banner {
+    margin: 0 0 12px;
+    padding: 10px 14px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    font-size: 13px;
+}
+
+.modxmcp-banner code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    word-break: break-all;
+}
+
+.modxmcp-banner-ok {
+    background: #eef7ee;
+    border-color: #cfe6cf;
+    color: #245c24;
+}
+
+.modxmcp-banner-warn {
+    background: #fdf3e3;
+    border-color: #f0dcb4;
+    color: #7a5311;
+}
+
+/* The plaintext token is shown exactly once, so it needs to be unmissable and
+   trivially selectable. */
+.modxmcp-token-reveal {
+    display: block;
+    margin: 10px 0;
+    padding: 12px;
+    background: #1f2430;
+    color: #d7e0ea;
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    word-break: break-all;
+    user-select: all;
+}
+
+.modxmcp-revoked {
+    opacity: 0.5;
+}
