@@ -51,3 +51,6 @@ $_lang['modxmcp.err.name_ns']         = 'A name is required.';
 $_lang['modxmcp.err.user_ns']         = 'Select the MODX user this token acts as.';
 $_lang['modxmcp.err.user_nf']         = 'That MODX user does not exist.';
 $_lang['modxmcp.err.token_nf']        = 'Token not found.';
+
+// Added for the token-issuance privilege check.
+$_lang['modxmcp.err.user_sudo'] = 'You cannot issue a token for a sudo user unless you are one yourself. Such a token would bypass all access control and be more privileged than your own account.';

@@ -8,6 +8,10 @@
 var MODxMCP = MODxMCP || {};
 MODxMCP.grid = MODxMCP.grid || {};
 
+MODxMCP.esc = function (v) {
+    return v === null || v === undefined ? '' : Ext.util.Format.htmlEncode(v);
+};
+
 MODxMCP.connector = function () {
     return MODxMCP.config.connector;
 };
@@ -29,18 +33,21 @@ MODxMCP.grid.Tokens = function (config) {
         remoteSort: true,
         autoHeight: true,
         columns: [
-            { header: _('modxmcp.token.name'), dataIndex: 'name', width: 140, sortable: true },
+            { header: _('modxmcp.token.name'), dataIndex: 'name', width: 140, sortable: true,
+              renderer: MODxMCP.esc },
             { header: _('modxmcp.token.prefix'), dataIndex: 'token_prefix', width: 80,
               renderer: function (v) { return '<code>' + Ext.util.Format.htmlEncode(v) + '</code>'; } },
-            { header: _('modxmcp.token.user'), dataIndex: 'username', width: 110 },
-            { header: _('modxmcp.token.scopes'), dataIndex: 'scopes_display', width: 180 },
+            { header: _('modxmcp.token.user'), dataIndex: 'username', width: 110, renderer: MODxMCP.esc },
+            { header: _('modxmcp.token.scopes'), dataIndex: 'scopes_display', width: 180,
+              renderer: MODxMCP.esc },
             { header: _('modxmcp.token.active'), dataIndex: 'active', width: 60,
               renderer: function (v) {
                   return v == 1 ? _('yes') : '<span class="modxmcp-revoked">' + _('no') + '</span>';
               } },
             { header: _('modxmcp.token.last_used'), dataIndex: 'last_used_at', width: 130, sortable: true },
             { header: _('modxmcp.token.expires'), dataIndex: 'expires_at', width: 120, sortable: true },
-            { header: _('modxmcp.token.ip_allowlist'), dataIndex: 'ip_allowlist', width: 130 }
+            { header: _('modxmcp.token.ip_allowlist'), dataIndex: 'ip_allowlist', width: 130,
+              renderer: MODxMCP.esc }
         ],
         tbar: [{
             text: '<i class="icon icon-plus"></i> ' + _('modxmcp.token.create'),
@@ -171,8 +178,10 @@ MODxMCP.grid.Audit = function (config) {
         autoHeight: true,
         columns: [
             { header: _('modxmcp.audit.when'), dataIndex: 'createdon', width: 140, sortable: true },
-            { header: _('modxmcp.audit.method'), dataIndex: 'rpc_method', width: 120 },
-            { header: _('modxmcp.audit.tool'), dataIndex: 'tool', width: 150 },
+            { header: _('modxmcp.audit.method'), dataIndex: 'rpc_method', width: 120,
+              renderer: MODxMCP.esc },
+            { header: _('modxmcp.audit.tool'), dataIndex: 'tool', width: 150,
+              renderer: MODxMCP.esc },
             { header: _('modxmcp.audit.result'), dataIndex: 'result', width: 70,
               renderer: function (v, m, rec) {
                   return rec.data.success == 1 ? v : '<span style="color:#b3261e">' + v + '</span>';
@@ -183,7 +192,7 @@ MODxMCP.grid.Audit = function (config) {
                   m.attr = 'title="' + Ext.util.Format.htmlEncode(v) + '"';
                   return Ext.util.Format.htmlEncode(rec.data.error_code + ': ' + v);
               } },
-            { header: _('modxmcp.audit.ip'), dataIndex: 'ip', width: 110 },
+            { header: _('modxmcp.audit.ip'), dataIndex: 'ip', width: 110, renderer: MODxMCP.esc },
             { header: _('modxmcp.audit.duration'), dataIndex: 'duration_ms', width: 60 }
         ],
         tbar: [{

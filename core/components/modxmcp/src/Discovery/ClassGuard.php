@@ -36,6 +36,39 @@ final class ClassGuard
         '/^MODX\\\\Revolution\\\\modSession$/i',
         '/^MODX\\\\Revolution\\\\modActiveUser$/i',
         '/^MODXMCP\\\\Model\\\\/i',               // our own tokens and audit trail
+
+        // Settings, both directions. Writing them lets a token rewrite
+        // modxmcp.read_class_allowlist / write_class_allowlist and grant itself
+        // everything this guard is here to withhold, which is the same
+        // self-widening the modxmcp tables are blocked to prevent. Reading them
+        // is no safer: the secret lives in the generic `value` column while the
+        // secret-ness lives in `key`, so field-name redaction cannot see it and
+        // SMTP passwords and API keys would come back in plain text.
+        '/^MODX\\\\Revolution\\\\modSystemSetting$/i',
+        '/^MODX\\\\Revolution\\\\modContextSetting$/i',
+        '/^MODX\\\\Revolution\\\\modDashboardWidget$/i',
+    ];
+
+    /**
+     * Readable generically, but never writable generically.
+     *
+     * These all have dedicated processor-backed tools. Reaching them through
+     * xPDO::save() would bypass the processor's own checkPermissions() and every
+     * lifecycle event, which is the exact failure this extra exists to prevent.
+     * For snippets and plugins it is worse than inconsistent: their body is
+     * executable PHP, so a generic write is remote code execution that never
+     * passes a permission check.
+     *
+     * The tool descriptions already say "never use this for resources or
+     * elements". Prose is not an access control.
+     */
+    private const WRITE_BLOCKED = [
+        '/^MODX\\\\Revolution\\\\modResource$/i',
+        '/^MODX\\\\Revolution\\\\modSnippet$/i',
+        '/^MODX\\\\Revolution\\\\modPlugin$/i',
+        '/^MODX\\\\Revolution\\\\modChunk$/i',
+        '/^MODX\\\\Revolution\\\\modTemplate$/i',
+        '/^MODX\\\\Revolution\\\\modTemplateVar$/i',
     ];
 
     /**
@@ -83,7 +116,18 @@ final class ClassGuard
     public function canWrite(string $class): bool
     {
         return !$this->isHardBlocked($class)
+            && !$this->isWriteBlocked($class)
             && $this->inList($class, 'modxmcp.write_class_allowlist');
+    }
+
+    public function isWriteBlocked(string $class): bool
+    {
+        foreach (self::WRITE_BLOCKED as $pattern) {
+            if (preg_match($pattern, $class)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -96,8 +140,16 @@ final class ClassGuard
     {
         if ($this->isHardBlocked($class)) {
             return "Access to {$class} is permanently blocked by modxmcp. It holds credentials, "
-                . 'session data, access-control rules, or modxmcp\'s own tokens and audit trail. '
-                . 'No setting can enable it.';
+                . 'session data, access-control rules, system settings, or modxmcp\'s own tokens '
+                . 'and audit trail. No setting can enable it.';
+        }
+
+        if ($operation === 'write' && $this->isWriteBlocked($class)) {
+            return "Generic writes to {$class} are permanently blocked. Writing it directly would "
+                . 'bypass the MODX processor that enforces permissions and fires the events extras '
+                . 'depend on. Use the dedicated tools instead: modxmcp_resource_create / '
+                . 'modxmcp_resource_update for resources, modxmcp_element_save for elements. '
+                . 'Reading this class generically is still possible if it is allowlisted.';
         }
 
         $setting = $operation === 'write'

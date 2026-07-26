@@ -38,8 +38,16 @@ class Home extends modExtraManagerController
         $this->addCss($assets . 'modxmcp.css');
         $this->addJavascript($assets . 'modxmcp.js');
 
-        $this->addHtml('<script>Ext.onReady(function(){ MODxMCP.config = '
-            . json_encode($this->config(), JSON_UNESCAPED_SLASHES) . '; });</script>');
+        // Hex-escaping tags and quotes so nothing in the encoded payload can
+        // close the inline <script>. Both values are privileged, so this is
+        // hardening rather than a live hole, but a literal </script> in a site
+        // URL should not be able to break the page open.
+        $config = json_encode(
+            $this->config(),
+            JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+        );
+
+        $this->addHtml('<script>Ext.onReady(function(){ MODxMCP.config = ' . $config . '; });</script>');
     }
 
     public function getTemplateFile()

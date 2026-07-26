@@ -66,7 +66,22 @@ final class ToolRegistry
         } catch (\Throwable $e) {
             // A tool blowing up is a tool-level failure, not a protocol failure:
             // it is reported inside a successful JSON-RPC result with isError.
-            return $this->frame(['error' => $e->getMessage()], true);
+            //
+            // The detail goes to the log, not to the caller. An unexpected
+            // Throwable here is typically a PDOException, whose message can
+            // carry SQL fragments, table names and filesystem paths.
+            $modx->log(\MODX\Revolution\modX::LOG_LEVEL_ERROR, sprintf(
+                'modxmcp: tool "%s" threw %s: %s @ %s:%d',
+                $name,
+                get_class($e),
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine()
+            ));
+
+            return $this->frame([
+                'error' => "The tool '{$name}' failed. The details are in the MODX error log.",
+            ], true);
         }
 
         return $this->frame($payload, false);

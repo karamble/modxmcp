@@ -18,6 +18,11 @@ class ModxmcpTokenCreateProcessor extends Processor
     public $languageTopics = ['modxmcp:default'];
     public $permission     = 'settings';
 
+    private function issuerIsSudo(): bool
+    {
+        return $this->modx->user && (bool) $this->modx->user->get('sudo');
+    }
+
     public function process()
     {
         Package::load($this->modx);
@@ -30,8 +35,20 @@ class ModxmcpTokenCreateProcessor extends Processor
         }
         if ($userId <= 0) {
             $this->addFieldError('user_id', $this->modx->lexicon('modxmcp.err.user_ns'));
-        } elseif (!$this->modx->getObject(modUser::class, $userId)) {
-            $this->addFieldError('user_id', $this->modx->lexicon('modxmcp.err.user_nf'));
+        } else {
+            /** @var modUser|null $target */
+            $target = $this->modx->getObject(modUser::class, $userId);
+            if (!$target) {
+                $this->addFieldError('user_id', $this->modx->lexicon('modxmcp.err.user_nf'));
+            } elseif ($target->get('sudo') && !$this->issuerIsSudo()) {
+                // This processor is gated on "settings", which is not sudo. Without
+                // this check a manager holding settings could mint a token bound to
+                // the sudo administrator and then act as sudo through the API, where
+                // sudo bypasses every ACL and writing a snippet or plugin is code
+                // execution. Issuing a credential more privileged than yourself is
+                // escalation regardless of how the credential is later used.
+                $this->addFieldError('user_id', $this->modx->lexicon('modxmcp.err.user_sudo'));
+            }
         }
         if ($this->hasErrors()) {
             return $this->failure();

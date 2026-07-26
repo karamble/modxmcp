@@ -54,9 +54,42 @@ final class AuditLogger
                 'createdon'     => date('Y-m-d H:i:s'),
             ]);
             $row->save();
+
+            $this->maybePrune($modx);
         } catch (\Throwable $e) {
             $modx->log(modX::LOG_LEVEL_ERROR, 'modxmcp: could not write audit row: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Enforce the retention setting occasionally, rather than never.
+     *
+     * modxmcp.audit_retention_days previously configured a policy nothing acted
+     * on, so an administrator setting 30 days believed old rows were being
+     * removed while the table grew forever. That matters more than it sounds:
+     * a row is written before authentication succeeds, so an unauthenticated
+     * caller can grow this table on purpose.
+     *
+     * Sampled rather than run every request because a DELETE across a large
+     * table on every call would be a self-inflicted denial of service, and
+     * pruning is not urgent enough to be worth it.
+     */
+    private function maybePrune(modX $modx): void
+    {
+        $days = (int) $modx->getOption('modxmcp.audit_retention_days', null, 90);
+        if ($days <= 0) {
+            return;
+        }
+
+        try {
+            if (random_int(1, 200) !== 1) {
+                return;
+            }
+        } catch (\Throwable $e) {
+            return;
+        }
+
+        $this->prune($modx, $days);
     }
 
     /**

@@ -43,6 +43,8 @@ final class Authenticator
             throw McpException::forbidden('Bound MODX user is missing or inactive');
         }
 
+        $this->assertNotBlocked($user);
+
         if ($this->contextKey($modx) === 'mgr') {
             $this->attach($modx, $user);
         } else {
@@ -52,6 +54,52 @@ final class Authenticator
         $this->assertPolicyIsEnforced($modx, $user);
 
         return $user;
+    }
+
+    /**
+     * Honour MODX's block state.
+     *
+     * Blocking an account is the standard incident response to a compromise,
+     * and an administrator who does it reasonably expects the account to stop
+     * working everywhere. Checking only `active` would leave every token bound
+     * to that user authenticating with full permissions after the human has
+     * been locked out, with nothing in the UI hinting that tokens must be
+     * revoked separately.
+     *
+     * Mirrors the logic in MODX's own Security/Login processor: blocked with
+     * blockeduntil in the future is a temporary block, blocked with
+     * blockeduntil of 0 is an administrator block, and an elapsed temporary
+     * block is treated as expired. Unlike the login processor this does not
+     * clear the flag: quietly mutating a user profile from an API auth path
+     * would be a surprising side effect.
+     *
+     * @throws McpException
+     */
+    private function assertNotBlocked(modUser $user): void
+    {
+        $profile = $user->getOne('Profile');
+        if (!$profile) {
+            return;
+        }
+
+        if ($profile->get('blocked')) {
+            $until = (int) $profile->get('blockeduntil');
+            if ($until === 0 || $until > time()) {
+                throw McpException::forbidden(sprintf(
+                    'The MODX user "%s" bound to this token is blocked.',
+                    (string) $user->get('username')
+                ));
+            }
+        }
+
+        $after = (int) $profile->get('blockedafter');
+        if ($after > 0 && $after < time()) {
+            throw McpException::forbidden(sprintf(
+                'The MODX user "%s" bound to this token is blocked as of %s.',
+                (string) $user->get('username'),
+                date('Y-m-d H:i:s', $after)
+            ));
+        }
     }
 
     /**
