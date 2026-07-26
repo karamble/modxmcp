@@ -1,0 +1,29 @@
+Changelog for modxmcp.
+
+1.0.0-beta1
+===========
+First release.
+
+- MCP revision 2026-07-28 over Streamable HTTP. Stateless, no SSE.
+- Endpoint is a MODX resource calling the modxmcp snippet, so the package
+  ships no web-accessible PHP and works on installs that deny PHP under
+  assets/.
+- Token authentication: hashed at rest, per-token scopes, optional expiry
+  and IP allowlist, last-used tracking.
+- Audit log covering rejected calls as well as successful ones.
+- Manager page for token management and audit review.
+- Resource and element tools, all writes through MODX processors so
+  Manager-side behaviour fires: SeoSuite registration, Collections rules,
+  cache invalidation and lifecycle events.
+- Schema discovery across every installed extra, handling both package
+  layouts and both metadata formats, with field descriptions taken from
+  each extra's own lexicon.
+- Generic object access, opt-in per class for both reads and writes, with
+  a hard block on users, sessions, access-control rules and modxmcp's own
+  tables that no setting can override.
+- Adapters for SeoSuite (redirects), MIGX (item structure) and Collections
+  (container listing), registered only where the extra is installed.
+- OnMCPRegisterTools event so third-party extras can contribute tools. A
+  failing plugin degrades to its tools being absent, never to a dead
+  endpoint.
+- Zero third-party PHP dependencies.
