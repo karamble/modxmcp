@@ -1,0 +1,20 @@
+# modxmcp endpoint directory.
+#
+# mcp.php must stay reachable: it is the MCP endpoint. Everything else in here
+# is server-side only. The config file in particular holds a token hash and must
+# never be served, even if PHP execution is somehow disabled for this directory.
+
+<FilesMatch "\.(config\.php|inc\.php|log|json|md)$">
+    Require all denied
+</FilesMatch>
+
+# Directory listings would enumerate the endpoint and any sibling files.
+Options -Indexes
+
+# Deliberately NOT restricting HTTP methods at the Apache layer. The spec
+# requires GET and DELETE to be answered with 405 and an Allow header; a
+# LimitExcept block here would return 403 instead and break conformance.
+# mcp.php handles method rejection itself.
+
+# A 403 subrequest must not be re-routed through MODX's front controller.
+ErrorDocument 403 default

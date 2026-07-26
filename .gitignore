@@ -1,0 +1,17 @@
+# Build-time local paths, never distributed
+_build/build.config.php
+
+# Deployed instance config holds a token hash. Superseded by the modxmcp_token
+# table in M2, but never let one get committed in the meantime.
+modxmcp.config.php
+*.local.php
+
+# Transport package output
+_packages/
+*.transport.zip
+
+# Editor / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
