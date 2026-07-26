@@ -61,3 +61,17 @@ Security fixes found by review before any public release.
   MODX tag syntax in a file parsed by Smarty.
 - Removed the Components menu icon, which pushed the description onto its
   own line with a visible gap. No other extra sets that field.
+
+1.0.0-beta4
+===========
+- Dual-era protocol support. The endpoint now serves both 2026-07-28 and the
+  initialization-based era (2025-11-25, 2025-06-18, 2025-03-26), choosing per
+  request by how the client opens: per-request _meta selects the modern
+  revision, an initialize handshake selects the older one. Every shipping MCP
+  client still speaks the older era, and 2026-07-28 does not publish until
+  2026-07-28, so a modern-only server could not be connected to by anything.
+  No sessions are assigned in either era; the token identifies every request.
+- resource_create and resource_update now re-read the saved row instead of
+  returning what the processor echoes. Resource/Create returns only an id,
+  and Resource/Update strips pagetitle, longtitle, content, introtext,
+  description and menutitle.

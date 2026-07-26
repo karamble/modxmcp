@@ -11,7 +11,9 @@ use MODXMCP\Protocol\Errors;
 use MODXMCP\Protocol\HttpTransport;
 use MODXMCP\Protocol\McpException;
 use MODXMCP\Protocol\Meta;
+use MODXMCP\Protocol\ProtocolInterface;
 use MODXMCP\Protocol\Request;
+use MODXMCP\Protocol\V20251125;
 use MODXMCP\Protocol\V20260728;
 use MODXMCP\Registry\ToolRegistry;
 
@@ -30,7 +32,8 @@ final class Server
 
     private modX $modx;
     private HttpTransport $transport;
-    private V20260728 $protocol;
+    private V20260728 $modern;
+    private V20251125 $legacy;
     private TokenService $tokens;
     private Authenticator $auth;
     private ToolRegistry $tools;
@@ -39,7 +42,7 @@ final class Server
     public function __construct(
         modX $modx,
         HttpTransport $transport,
-        V20260728 $protocol,
+        V20260728 $modern,
         TokenService $tokens,
         Authenticator $auth,
         ToolRegistry $tools,
@@ -47,7 +50,8 @@ final class Server
     ) {
         $this->modx      = $modx;
         $this->transport = $transport;
-        $this->protocol  = $protocol;
+        $this->modern    = $modern;
+        $this->legacy    = new V20251125();
         $this->tokens    = $tokens;
         $this->auth      = $auth;
         $this->tools     = $tools;
@@ -74,7 +78,12 @@ final class Server
             $request = Request::fromJson($this->transport->body());
             $id      = $request->id();
 
-            $this->protocol->validate($request, $this->transport);
+            // Dual-era. A request carrying per-request _meta is served under
+            // 2026-07-28; anything else is an initialization-based client and
+            // gets 2025-11-25 semantics. Deciding per request rather than per
+            // connection is what makes this work without sessions.
+            $protocol = V20251125::claims($request) ? $this->legacy : $this->modern;
+            $protocol->validate($request, $this->transport);
 
             $token = $this->tokens->verify(
                 $this->modx,
@@ -92,7 +101,7 @@ final class Server
                 return;
             }
 
-            $result = $this->dispatch($request, $token);
+            $result = $this->dispatch($request, $token, $protocol);
             $this->transport->emitResult($id, $result);
             $this->record($request, $token, true, null, $startedAt);
         } catch (McpException $e) {
@@ -112,9 +121,21 @@ final class Server
      * @return array<string,mixed>|\stdClass
      * @throws McpException
      */
-    private function dispatch(Request $request, ModxmcpToken $token)
+    private function dispatch(Request $request, ModxmcpToken $token, ProtocolInterface $protocol)
     {
         switch ($request->method()) {
+            // Initialization-based clients open with this. Modern ones never
+            // send it, and V20260728::validate() rejects it before we get here.
+            case 'initialize':
+                return $this->legacy->initializeResult(
+                    $request,
+                    ['name' => self::NAME, 'version' => self::VERSION],
+                    $this->instructions()
+                );
+
+            case 'notifications/initialized':
+                return new \stdClass();
+
             case 'server/discover':
                 return $this->discoverResult();
 
@@ -163,17 +184,24 @@ final class Server
     {
         return [
             'resultType'        => 'complete',
-            'supportedVersions' => $this->protocol->supportedVersions(),
+            'supportedVersions' => array_merge(
+                $this->modern->supportedVersions(),
+                $this->legacy->supportedVersions()
+            ),
             'capabilities'      => ['tools' => new \stdClass()],
             '_meta'             => [
                 Meta::SERVER_INFO => ['name' => self::NAME, 'version' => self::VERSION],
             ],
-            'instructions' => 'Administers a MODX 3.x site. Every write goes through a MODX '
-                . 'processor, so Manager-side behaviour (SeoSuite registration, Collections '
-                . 'rules, cache invalidation, lifecycle events) fires natively. Call '
-                . 'modxmcp_site_info first to learn what this site contains and which '
-                . 'extra-specific rules apply to it.',
+            'instructions' => $this->instructions(),
         ];
+    }
+
+    private function instructions(): string
+    {
+        return 'Administers a MODX 3.x site. Every write goes through a MODX processor, so '
+            . 'Manager-side behaviour (SeoSuite registration, Collections rules, cache '
+            . 'invalidation, lifecycle events) fires natively. Call modxmcp_site_info first to '
+            . 'learn what this site contains and which extra-specific rules apply to it.';
     }
 
     private function record(
