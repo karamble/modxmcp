@@ -2,11 +2,15 @@
 /**
  * System settings shipped with the package.
  *
- * Every default here is the safe one. modxmcp is disabled on install and both
- * generic-access allowlists are empty, so a fresh install accepts no requests
- * and exposes no data until an administrator makes a deliberate choice. An
- * extra that hands out API access the moment it is installed would be a
- * liability on sites whose owners were only evaluating it.
+ * A fresh install exposes nothing, because it has no tokens: every request is
+ * rejected until an administrator deliberately creates one. That single act is
+ * the gate, so the endpoint itself ships enabled and the extra works as soon as
+ * it is installed.
+ *
+ * Generic object access is the exception and ships closed. Both allowlists are
+ * empty because, unlike everything else, that path has no MODX permission check
+ * behind it, so a permissive default would expose whatever an installed extra
+ * happens to store.
  *
  * @var \MODX\Revolution\modX $modx
  * @var array $sources
@@ -16,10 +20,15 @@ $settings = [];
 
 $entries = [
     'modxmcp.enabled' => [
-        // Stored as an explicit string. A PHP false is persisted as '', which
-        // is falsy enough to fail safe but renders wrong in a combo-boolean and
-        // reads as "unset" rather than "deliberately off".
-        'value' => '0',
+        // On by default. This is a kill switch, not the access control: the
+        // token is. A fresh install has zero tokens, so every request 401s
+        // until an administrator deliberately creates one. Shipping this off
+        // bought almost nothing and cost the out-of-box experience, forcing a
+        // hunt through System Settings before the extra did anything.
+        //
+        // Stored as an explicit string: a PHP boolean persists as '' and reads
+        // as unset rather than as a deliberate choice.
+        'value' => '1',
         'xtype' => 'combo-boolean',
         'area'  => 'modxmcp.main',
     ],

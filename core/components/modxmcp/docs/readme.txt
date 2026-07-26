@@ -23,8 +23,13 @@ same code path the Manager uses. Extras see the change and react to it.
 AFTER INSTALLING
 ----------------
 
-modxmcp is DISABLED on install and issues no token. Nothing works until you
-make two deliberate choices.
+Go to Components > modxmcp. The page shows your endpoint URL and lets you
+create a token. That is the whole setup.
+
+The endpoint is live from the moment you install, but a fresh install has
+no tokens, so every request is rejected until you create one. Creating a
+token is the deliberate act that grants access; modxmcp.enabled exists as a
+kill switch if you ever need to shut the endpoint off in a hurry.
 
 1. Components > modxmcp > Tokens > Create token.
 
@@ -45,15 +50,14 @@ make two deliberate choices.
 
    The token is shown once and stored hashed. It cannot be recovered.
 
-2. Set the system setting modxmcp.enabled to Yes.
+2. Point your MCP client at the endpoint URL shown on the page, with the
+   token as a bearer credential.
 
-The endpoint is a resource created at install with a random alias, listed
-in Components > modxmcp. It is a resource rather than a PHP file so that
+The endpoint is a resource created at install with a random alias, shown on
+the modxmcp page. It is a resource rather than a PHP file so that
 modxmcp ships nothing web-accessible, which means it also works on sites
 that deny PHP execution under assets/. Rename its alias if you want a
 different URL; do not change its content, template or cacheable flag.
-
-Point your MCP client at that URL with the token as a bearer credential.
 
 
 PROTOCOL
