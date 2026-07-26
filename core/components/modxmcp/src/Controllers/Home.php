@@ -3,11 +3,17 @@
 namespace MODXMCP\Controllers;
 
 use MODX\Revolution\modExtraManagerController;
-use MODX\Revolution\modResource;
 use MODXMCP\Runtime;
 
 /**
- * The MCP Server manager page: token management and the audit log.
+ * The MCP Server manager page: tokens, audit log and settings.
+ *
+ * Asset order matters and is the conventional one. The namespace loader and the
+ * widgets go through addJavascript; the inline block assigning MODxMCP.config
+ * follows; and sections/home.js goes through addLastJavascript so it runs after
+ * that config exists. Loading everything as a single addJavascript file put the
+ * page's Ext.onReady ahead of the config assignment, so MODxMCP.config was
+ * undefined at render time and the page came up empty.
  */
 class Home extends modExtraManagerController
 {
@@ -18,9 +24,9 @@ class Home extends modExtraManagerController
 
     public function checkPermissions()
     {
-        // Issuing a token grants API access that acts as a MODX user, so this
-        // page is gated on the same permission as system settings rather than
-        // on mere Manager access.
+        // Issuing a token grants API access acting as a MODX user, so this page
+        // is gated on the same permission as system settings rather than on
+        // mere Manager access.
         return $this->modx->hasPermission('settings');
     }
 
@@ -36,18 +42,28 @@ class Home extends modExtraManagerController
         $assets = $this->modx->getOption('assets_url', null, MODX_ASSETS_URL) . 'components/modxmcp/mgr/';
 
         $this->addCss($assets . 'modxmcp.css');
-        $this->addJavascript($assets . 'modxmcp.js');
+
+        $this->addJavascript($assets . 'js/modxmcp.js');
+        $this->addJavascript($assets . 'js/widgets/tokens.grid.js');
+        $this->addJavascript($assets . 'js/widgets/audit.grid.js');
+        $this->addJavascript($assets . 'js/widgets/settings.panel.js');
+        $this->addJavascript($assets . 'js/widgets/home.panel.js');
 
         // Hex-escaping tags and quotes so nothing in the encoded payload can
-        // close the inline <script>. Both values are privileged, so this is
-        // hardening rather than a live hole, but a literal </script> in a site
-        // URL should not be able to break the page open.
+        // close the inline <script>.
         $config = json_encode(
             $this->config(),
             JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
         );
 
-        $this->addHtml('<script>Ext.onReady(function(){ MODxMCP.config = ' . $config . '; });</script>');
+        $this->addHtml('<script type="text/javascript">
+            Ext.onReady(function() {
+                MODxMCP.config = ' . $config . ';
+            });
+        </script>');
+
+        // Must be last: it renders the page and needs the config above.
+        $this->addLastJavascript($assets . 'js/sections/home.js');
     }
 
     public function getTemplateFile()
@@ -58,14 +74,14 @@ class Home extends modExtraManagerController
 
     public function process(array $scriptProperties = [])
     {
-        $config = $this->config();
-        $this->setPlaceholder('enabled', $config['enabled']);
-        $this->setPlaceholder('endpoint', $config['endpoint']);
         return '';
     }
 
     /**
-     * Values the page needs to describe the current install.
+     * The endpoint URL and counts are fetched by the page from
+     * mgr/settings/get, not embedded here: settings are editable on this page,
+     * so anything baked in at render time would go stale the moment something
+     * was saved.
      *
      * @return array<string,mixed>
      */
@@ -74,28 +90,6 @@ class Home extends modExtraManagerController
         return [
             'connector' => $this->modx->getOption('assets_url', null, MODX_ASSETS_URL)
                 . 'components/modxmcp/connector.php',
-            'enabled'   => (bool) $this->modx->getOption('modxmcp.enabled', null, false),
-            'endpoint'  => $this->endpointUrl(),
         ];
-    }
-
-    /**
-     * Resolve the endpoint from the resource that actually hosts the snippet,
-     * rather than assuming an alias. The alias is the site owner's to change,
-     * and a stale URL printed here would be worse than none.
-     */
-    private function endpointUrl(): string
-    {
-        $c = $this->modx->newQuery(modResource::class);
-        $c->where(['content:LIKE' => '%[[!modxmcp%', 'published' => 1, 'deleted' => 0]);
-        $c->limit(1);
-
-        /** @var modResource|null $resource */
-        $resource = $this->modx->getObject(modResource::class, $c);
-        if (!$resource) {
-            return '';
-        }
-
-        return rtrim((string) $this->modx->getOption('site_url'), '/') . '/' . ltrim((string) $resource->get('uri'), '/');
     }
 }

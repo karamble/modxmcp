@@ -81,3 +81,12 @@ $_lang['modxmcp.set.write_class_allowlist_desc'] = 'Classes generic object write
 $_lang['modxmcp.stats.tokens']              = 'Tokens';
 $_lang['modxmcp.stats.audit']               = 'Audit rows';
 $_lang['modxmcp.stats.failed']              = 'rejected';
+
+// Token scopes, offered as checkboxes rather than a text field: the valid
+// values are a closed set only this extra knows.
+$_lang['modxmcp.scope.read']              = 'read - inspect resources, elements and schemas';
+$_lang['modxmcp.scope.write_content']     = 'write:content - create, update and delete resources';
+$_lang['modxmcp.scope.write_elements']    = 'write:elements - create, update and delete chunks, snippets, templates, TVs and plugins';
+$_lang['modxmcp.scope.write_objects']     = 'write:objects - generic writes to allowlisted extra classes';
+$_lang['modxmcp.scope.write_objects_desc'] = 'Grants nothing on its own: generic access is also gated per class by the writable-classes list on the Settings tab, which is empty by default.';
+$_lang['modxmcp.audit.failures_only']     = 'Rejected only';

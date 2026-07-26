@@ -67,3 +67,10 @@
 #modxmcp-settings-panel fieldset {
     margin-bottom: 16px;
 }
+
+/* Rejected audit rows. Red enough to scan for, not so red the grid looks
+   broken when a few 401s are simply scanners finding the endpoint. */
+.modxmcp-failed {
+    color: #b3261e;
+    font-weight: 600;
+}
