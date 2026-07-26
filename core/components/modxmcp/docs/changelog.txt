@@ -46,3 +46,18 @@ Security fixes found by review before any public release.
   MODX treats "no access policy" as unrestricted, so such a user holds
   every permission; binding a token to an ordinary-looking account with no
   groups produced the most privileged token possible rather than the least.
+
+1.0.0-beta3
+===========
+- The endpoint now ships enabled. Access is granted by tokens, not by that
+  switch: a fresh install has none, so every request is rejected until an
+  administrator creates one. Requiring a System Settings edit first was
+  friction for no security benefit. The setting remains as a kill switch.
+- All modxmcp settings are now editable on the extra's own page, under a
+  Settings tab, alongside the endpoint URL and live token and audit counts.
+  Nothing about administering this extra requires leaving its page.
+- Fixed the manager page failing to load at all: the controller stub
+  extended a class before the autoloader was registered, and home.tpl used
+  MODX tag syntax in a file parsed by Smarty.
+- Removed the Components menu icon, which pushed the description onto its
+  own line with a visible gap. No other extra sets that field.

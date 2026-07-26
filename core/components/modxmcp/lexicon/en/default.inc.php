@@ -54,3 +54,30 @@ $_lang['modxmcp.err.token_nf']        = 'Token not found.';
 
 // Added for the token-issuance privilege check.
 $_lang['modxmcp.err.user_sudo'] = 'You cannot issue a token for a sudo user unless you are one yourself. Such a token would bypass all access control and be more privileged than your own account.';
+
+// Settings tab. Administration of this extra happens on the extra's own page,
+// so every one of these is editable there rather than in System Settings.
+$_lang['modxmcp.settings']                  = 'Settings';
+$_lang['modxmcp.settings.save']             = 'Save settings';
+$_lang['modxmcp.settings.saved']            = 'Settings saved.';
+$_lang['modxmcp.settings.general']          = 'General';
+$_lang['modxmcp.settings.generic_access']   = 'Generic object access';
+
+$_lang['modxmcp.set.enabled']               = 'Endpoint enabled';
+$_lang['modxmcp.set.enabled_desc']          = 'Turn the MCP endpoint off in a hurry. Access is granted by tokens, not by this switch: with no tokens issued, every request is rejected regardless.';
+$_lang['modxmcp.set.log_arguments']         = 'Record tool arguments in the audit log';
+$_lang['modxmcp.set.log_arguments_desc']    = 'Off by default. Arguments can contain page content and other caller-supplied data.';
+$_lang['modxmcp.set.audit_retention_days']  = 'Audit retention (days)';
+$_lang['modxmcp.set.audit_retention_days_desc'] = 'Rows older than this are deleted. 0 keeps everything, which grows without limit because rejected requests are logged too.';
+$_lang['modxmcp.set.discovery_cache_seconds'] = 'Schema discovery cache (seconds)';
+$_lang['modxmcp.set.discovery_cache_seconds_desc'] = 'How long the scan of installed extras is reused. Lower it if you install extras often.';
+$_lang['modxmcp.set.trusted_proxy_header']  = 'Trusted proxy header';
+$_lang['modxmcp.set.trusted_proxy_header_desc'] = 'Only set this if the site really is behind a proxy, e.g. X-Forwarded-For. Setting it otherwise lets callers forge the address in the audit log and defeat a token IP allowlist.';
+$_lang['modxmcp.set.read_class_allowlist']  = 'Readable classes';
+$_lang['modxmcp.set.read_class_allowlist_desc'] = 'Classes generic object reads may touch. Empty means none. Comma or space separated; a trailing * matches a prefix. Unlike the resource and element tools, this path has no MODX permission check behind it, so these lists are the only control.';
+$_lang['modxmcp.set.write_class_allowlist'] = 'Writable classes';
+$_lang['modxmcp.set.write_class_allowlist_desc'] = 'Classes generic object writes may touch. Empty means none. Users, sessions, access-control rules, system settings and modxmcp own tables can never be reached whatever is listed here, and resources and elements can never be written this way because that would bypass the MODX processors.';
+
+$_lang['modxmcp.stats.tokens']              = 'Tokens';
+$_lang['modxmcp.stats.audit']               = 'Audit rows';
+$_lang['modxmcp.stats.failed']              = 'rejected';

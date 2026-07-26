@@ -10,7 +10,10 @@ $menu->fromArray([
     'text'        => 'modxmcp',
     'parent'      => 'components',
     'description' => 'modxmcp.menu.desc',
-    'icon'        => '<i class="icon icon-plug"></i>',
+    // Left empty on purpose. MODX renders this field as raw markup next to the
+    // title, and an element here pushes the description onto its own line with
+    // a visible gap. No other extra in the Components menu sets it.
+    'icon'        => '',
     'action'      => 'home',
     'namespace'   => 'modxmcp',
     'menuindex'   => 0,
