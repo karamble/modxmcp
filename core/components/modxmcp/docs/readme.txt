@@ -32,6 +32,17 @@ make two deliberate choices.
    in the Manager. Pick the least privileged account that suffices; do not
    reach for an administrator out of habit.
 
+   IMPORTANT, and counterintuitive: a user belonging to NO user group is
+   not a restricted user. MODX treats "no access policy" as unrestricted
+   rather than as denied, so such a user holds every permission, including
+   ones that do not exist. Creating a fresh account with no groups and
+   binding a token to it produces the most privileged token possible, not
+   the least.
+
+   modxmcp refuses to act as such a user and will reject the request with
+   an explanation. Put the user in a user group with an access policy, and
+   size that policy to what the agent actually needs.
+
    The token is shown once and stored hashed. It cannot be recovered.
 
 2. Set the system setting modxmcp.enabled to Yes.

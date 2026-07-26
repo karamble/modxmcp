@@ -27,3 +27,22 @@ First release.
   failing plugin degrades to its tools being absent, never to a dead
   endpoint.
 - Zero third-party PHP dependencies.
+
+1.0.0-beta2
+===========
+Security fixes found by review before any public release.
+
+- SQL injection in generic object filters. Filter keys accept an optional
+  comparison operator after a colon, and xPDO interpolates that operator
+  into SQL rather than binding it. Only the field half was validated, so a
+  key such as "id:) OR 1=1 -- " produced a working injection. Operators are
+  now checked against a fixed allowlist and the key is rebuilt from the
+  validated parts. Values were always bound and were never the risk.
+- ClassGuard matched class names case-sensitively while PHP resolves them
+  case-insensitively, so a differently-cased spelling of a hard-blocked
+  class did not match the block list. Both the block list and the
+  allowlists are now case-insensitive.
+- modxmcp now refuses to act as a MODX user that belongs to no user group.
+  MODX treats "no access policy" as unrestricted, so such a user holds
+  every permission; binding a token to an ordinary-looking account with no
+  groups produced the most privileged token possible rather than the least.

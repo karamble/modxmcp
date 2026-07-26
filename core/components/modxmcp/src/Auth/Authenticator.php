@@ -2,6 +2,7 @@
 
 namespace MODXMCP\Auth;
 
+use MODX\Revolution\modAccessContext;
 use MODX\Revolution\modUser;
 use MODX\Revolution\modX;
 use MODXMCP\Protocol\McpException;
@@ -23,6 +24,8 @@ use MODXMCP\Protocol\McpException;
  */
 final class Authenticator
 {
+    private const MANAGER_CONTEXT = 'mgr';
+
     // Token verification lives in TokenService: it needs the database, so it
     // cannot run before MODX is up the way the M1 file-based config did.
 
@@ -42,12 +45,63 @@ final class Authenticator
 
         if ($this->contextKey($modx) === 'mgr') {
             $this->attach($modx, $user);
-            return $user;
+        } else {
+            $this->enterManagerContext($modx, $user);
         }
 
-        $this->enterManagerContext($modx, $user);
+        $this->assertPolicyIsEnforced($modx, $user);
 
         return $user;
+    }
+
+    /**
+     * Refuse to act as a user whose permissions are not actually enforced.
+     *
+     * A MODX user belonging to no user group has no access policy on the mgr
+     * context, and MODX treats "no policy" as unrestricted rather than as
+     * denied. Verified against stock MODX with modxmcp not loaded at all: such a
+     * user answers true to save_document AND true to an invented permission
+     * name, and successfully creates resources.
+     *
+     * That inverts the intuition this extra's security story rests on. "The
+     * token can never do more than that user can do in the Manager" stays true,
+     * but for a groupless user the answer to "what can they do" is "everything".
+     * An administrator picking an ordinary-looking account for a least-privilege
+     * token would get the opposite of what they intended.
+     *
+     * The test is structural rather than behavioural. An earlier version probed
+     * a random permission name and refused if it came back true, which was
+     * wrong: that answer depends on how the context was initialised, so it
+     * false-positived on properly grouped users. What actually distinguishes
+     * the two cases is the loaded access data itself:
+     *
+     *   grouped   modAccessContext => ['mgr' => [ ...policy... ], 'web' => [...]]
+     *   groupless modAccessContext => []
+     *
+     * @throws McpException
+     */
+    private function assertPolicyIsEnforced(modX $modx, modUser $user): void
+    {
+        // sudo is unrestricted by definition, and openly so.
+        if ($user->get('sudo')) {
+            return;
+        }
+
+        $attributes = $user->getAttributes([], self::MANAGER_CONTEXT);
+        $contextAccess = $attributes[modAccessContext::class] ?? [];
+
+        if (!empty($contextAccess[self::MANAGER_CONTEXT])) {
+            return;
+        }
+
+        throw McpException::forbidden(sprintf(
+            'The MODX user "%s" bound to this token belongs to no user group with an access '
+            . 'policy on the manager context. MODX treats that as unrestricted rather than as '
+            . 'denied, so the user holds every permission and the token would be more privileged '
+            . 'than an administrator account, not less. Add the user to a user group with an '
+            . 'access policy before using it for a token.',
+            (string) $user->get('username')
+        ));
     }
 
     /**

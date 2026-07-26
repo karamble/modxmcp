@@ -26,12 +26,16 @@ final class ClassGuard
      * classes mean privilege escalation; modxmcp's own tables would let a token
      * widen its own scope or erase the record of having done so.
      */
+    // Case-insensitive by design. PHP class names are case-insensitive, so
+    // "modx\revolution\moduser" resolves to the same class as
+    // "MODX\Revolution\modUser"; case-sensitive patterns here would block one
+    // spelling and wave the other through.
     private const HARD_BLOCKED = [
-        '/^MODX\\\\Revolution\\\\modUser/',      // modUser, modUserProfile, modUserGroup*, modUserSetting
-        '/^MODX\\\\Revolution\\\\modAccess/',    // every ACL class
-        '/^MODX\\\\Revolution\\\\modSession$/',
-        '/^MODX\\\\Revolution\\\\modActiveUser$/',
-        '/^MODXMCP\\\\Model\\\\/',               // our own tokens and audit trail
+        '/^MODX\\\\Revolution\\\\modUser/i',      // modUser, modUserProfile, modUserGroup*, modUserSetting
+        '/^MODX\\\\Revolution\\\\modAccess/i',    // every ACL class
+        '/^MODX\\\\Revolution\\\\modSession$/i',
+        '/^MODX\\\\Revolution\\\\modActiveUser$/i',
+        '/^MODXMCP\\\\Model\\\\/i',               // our own tokens and audit trail
     ];
 
     /**
@@ -148,14 +152,17 @@ final class ClassGuard
                 // Deliberately still subject to the hard block list above.
                 return true;
             }
+            // Matching is case-insensitive throughout, for the same reason the
+            // hard block list is: an allowlist that misses a spelling the class
+            // loader accepts is not an allowlist.
             if (substr($entry, -1) === '*') {
                 $prefix = substr($entry, 0, -1);
-                if ($prefix !== '' && strncmp($class, $prefix, strlen($prefix)) === 0) {
+                if ($prefix !== '' && strncasecmp($class, $prefix, strlen($prefix)) === 0) {
                     return true;
                 }
                 continue;
             }
-            if ($entry === $class) {
+            if (strcasecmp($entry, $class) === 0) {
                 return true;
             }
         }

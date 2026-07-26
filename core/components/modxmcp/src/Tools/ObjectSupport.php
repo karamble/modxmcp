@@ -60,11 +60,30 @@ trait ObjectSupport
     }
 
     /**
+     * Comparison operators a caller may use.
+     *
+     * This is an allowlist because xPDO INTERPOLATES the operator into SQL
+     * rather than binding it. Validating only the field name is not enough:
+     * a key of "id:) OR 1=1 -- " passes a field check on the "id" half and
+     * xPDO then emits
+     *
+     *     WHERE `x`.`id` ) OR 1=1 --  1
+     *
+     * which is a working injection. Values are bound and were never the risk;
+     * the key always was.
+     */
+    private const ALLOWED_OPERATORS = [
+        '=', '!=', '<>', '>', '>=', '<', '<=',
+        'LIKE', 'NOT LIKE', 'IN', 'NOT IN', 'IS', 'IS NOT',
+    ];
+
+    /**
      * Build xPDO criteria from a caller-supplied filter map.
      *
-     * Values are passed as bound criteria, never interpolated. Field names are
-     * checked against the class's own field list so an operator suffix cannot
-     * smuggle in something that is not a column.
+     * Both halves of every key are validated: the field against the class's own
+     * columns, the operator against a fixed allowlist. Anything else is
+     * rejected outright rather than sanitised, because there is no legitimate
+     * caller input that needs escaping here.
      *
      * @param array<string,mixed> $filters
      * @return array<string,mixed>
@@ -80,13 +99,39 @@ trait ObjectSupport
         $criteria = [];
 
         foreach ($filters as $key => $value) {
-            // Accept "field" and "field:OPERATOR", validating the field half.
-            $field = explode(':', (string) $key, 2)[0];
+            $key = (string) $key;
+
+            // Exactly "field" or "field:OPERATOR". Conjunction prefixes such as
+            // "OR:" are not offered to callers: they change query semantics and
+            // add a third thing to validate for no benefit here.
+            $parts = explode(':', $key);
+            if (count($parts) > 2) {
+                throw McpException::invalidParams(
+                    "Malformed filter key '{$key}'. Use \"field\" or \"field:OPERATOR\".");
+            }
+
+            $field = $parts[0];
             if (!in_array($field, $known, true)) {
                 throw McpException::invalidParams(
                     "'{$field}' is not a field of {$class}. Use modxmcp_schema_describe to see its fields.");
             }
-            $criteria[(string) $key] = $value;
+
+            if (count($parts) === 2) {
+                $operator = strtoupper(trim($parts[1]));
+                if (!in_array($operator, self::ALLOWED_OPERATORS, true)) {
+                    throw McpException::invalidParams(sprintf(
+                        "'%s' is not an allowed comparison operator. Use one of: %s.",
+                        $parts[1],
+                        implode(', ', self::ALLOWED_OPERATORS)
+                    ));
+                }
+                // Rebuild from the validated parts so nothing of the caller's
+                // original string survives into the query.
+                $criteria[$field . ':' . $operator] = $value;
+                continue;
+            }
+
+            $criteria[$field] = $value;
         }
 
         return $criteria;
