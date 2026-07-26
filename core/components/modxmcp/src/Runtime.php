@@ -64,6 +64,18 @@ final class Runtime
         $registry->register(new Tools\ElementSaveTool());
         $registry->register(new Tools\ElementDeleteTool());
 
+        // Schema discovery. Metadata only, so these need no allowlist: a caller
+        // that cannot see what exists cannot tell the user what to enable.
+        $registry->register(new Tools\SchemaListTool());
+        $registry->register(new Tools\SchemaDescribeTool());
+
+        // Generic object access over any discovered class. Gated per class by
+        // ClassGuard, which for arbitrary classes is the only access control
+        // there is: xPDO has no permission model and these bypass processors.
+        $registry->register(new Tools\ObjectListTool());
+        $registry->register(new Tools\ObjectSaveTool());
+        $registry->register(new Tools\ObjectDeleteTool());
+
         // Maintenance
         $registry->register(new Tools\CacheRefreshTool());
 

@@ -111,6 +111,25 @@ $settings = [
         'xtype' => 'textfield',
         'area'  => 'modxmcp',
     ],
+    // Generic object access is opt-in per class. Both default to empty: xPDO has
+    // no permission model, so for an arbitrary extra class these settings are
+    // the only access control, and a permissive default would expose whatever
+    // that extra happens to store.
+    'modxmcp.read_class_allowlist' => [
+        'value' => '',
+        'xtype' => 'textarea',
+        'area'  => 'modxmcp.generic_access',
+    ],
+    'modxmcp.write_class_allowlist' => [
+        'value' => '',
+        'xtype' => 'textarea',
+        'area'  => 'modxmcp.generic_access',
+    ],
+    'modxmcp.discovery_cache_seconds' => [
+        'value' => '300',
+        'xtype' => 'textfield',
+        'area'  => 'modxmcp',
+    ],
 ];
 
 foreach ($settings as $key => $def) {
