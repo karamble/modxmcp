@@ -47,7 +47,25 @@ final class Runtime
     private static function registry(modX $modx): ToolRegistry
     {
         $registry = new ToolRegistry();
+
+        // Orientation
         $registry->register(new SiteInfoTool());
+
+        // Resources. Every write goes through a MODX processor.
+        $registry->register(new Tools\ResourceListTool());
+        $registry->register(new Tools\ResourceGetTool());
+        $registry->register(new Tools\ResourceCreateTool());
+        $registry->register(new Tools\ResourceUpdateTool());
+        $registry->register(new Tools\ResourceDeleteTool());
+
+        // Elements, all five types behind one discriminated set.
+        $registry->register(new Tools\ElementListTool());
+        $registry->register(new Tools\ElementGetTool());
+        $registry->register(new Tools\ElementSaveTool());
+        $registry->register(new Tools\ElementDeleteTool());
+
+        // Maintenance
+        $registry->register(new Tools\CacheRefreshTool());
 
         // M5 opens this to third-party extras via OnMCPRegisterTools.
 
