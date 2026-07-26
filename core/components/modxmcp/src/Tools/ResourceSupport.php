@@ -127,4 +127,31 @@ trait ResourceSupport
     {
         return self::$resourceFields;
     }
+
+    /**
+     * Describe a resource by re-reading it after a write.
+     *
+     * The processors cannot be trusted to echo what they saved.
+     * Resource/Create::cleanup() returns nothing but the id, so a caller could
+     * not see the alias MODX derived, the resulting URI, or whether the
+     * resource actually published. Resource/Update returns more but explicitly
+     * strips pagetitle, longtitle, content, introtext, description and
+     * menutitle, so "what changed" is exactly what it omits.
+     *
+     * Reading the row back is authoritative and gives both tools the same
+     * shape, which matters more than saving a query.
+     *
+     * @return array<string,mixed>
+     * @throws McpException
+     */
+    protected function summarise(modX $modx, int $id): array
+    {
+        /** @var modResource|null $resource */
+        $resource = $modx->getObject(modResource::class, $id);
+        if (!$resource) {
+            throw McpException::internal("Resource {$id} could not be read back after saving");
+        }
+
+        return $this->pick($resource->toArray(), $this->resourceFields());
+    }
 }

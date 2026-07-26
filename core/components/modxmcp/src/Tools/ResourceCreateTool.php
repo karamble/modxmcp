@@ -97,7 +97,8 @@ final class ResourceCreateTool extends AbstractTool
 
         $object = $this->runProcessor($modx, 'Resource/Create', $properties);
 
-        $result = $this->pick($object, $this->resourceFields());
+        // Read the row back: this processor returns only the id.
+        $result = $this->summarise($modx, (int) ($object['id'] ?? 0));
         $result['warnings'] = $this->parentWarnings($modx, $parent, $showInTree);
 
         return $result;

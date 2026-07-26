@@ -110,9 +110,12 @@ final class ResourceUpdateTool extends AbstractTool
             $properties += $this->tvProperties($modx, $currentTvs);
         }
 
-        $object = $this->runProcessor($modx, 'Resource/Update', $properties);
+        $this->runProcessor($modx, 'Resource/Update', $properties);
 
-        $result   = $this->pick($object, $this->resourceFields());
+        // Read the row back: this processor strips exactly the fields an update
+        // is most likely to have changed (pagetitle, longtitle, content,
+        // introtext, description, menutitle).
+        $result   = $this->summarise($modx, $id);
         $warnings = $this->parentWarnings(
             $modx,
             (int) ($properties['parent'] ?? 0),
@@ -122,7 +125,7 @@ final class ResourceUpdateTool extends AbstractTool
         // An alias change silently breaks every existing link to the old URL.
         // SeoSuite is the usual owner of redirects here, but it does not create
         // one for a programmatic change, so say so rather than let it rot.
-        $newAlias = (string) ($object['alias'] ?? $originalAlias);
+        $newAlias = (string) ($result['alias'] ?? $originalAlias);
         if ($newAlias !== $originalAlias) {
             $warnings[] = sprintf(
                 'Alias changed from "%s" to "%s", so the URL moved from "%s". No redirect was '
