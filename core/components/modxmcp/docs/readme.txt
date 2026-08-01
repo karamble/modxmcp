@@ -109,6 +109,16 @@ Finding things
                       with a tag_reference mode that finds every call site of a
                       named element
 
+Files
+  file_upload         one file, base64-encoded, through the Manager upload
+                      path, so the media source policy, the upload settings
+                      and the file-manager events all apply. Ships disabled:
+                      the directory allowlist it is gated on is empty until an
+                      administrator fills it in on the Settings tab. Needs the
+                      write:media token scope. PHP and other server-executable
+                      extensions are refused outright, in every dot-segment of
+                      the name, and no setting can enable them
+
 Orientation and housekeeping
   site_info           versions (including a build fingerprint of the running
                       code), contexts, templates, extras, and advisories for

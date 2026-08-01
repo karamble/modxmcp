@@ -43,6 +43,23 @@ MODxMCP.panel.Settings = function (config) {
             ]
         }, {
             xtype: 'fieldset',
+            title: _('modxmcp.settings.uploads'),
+            items: [
+                { xtype: 'textarea', fieldLabel: _('modxmcp.set.upload_path_allowlist'),
+                  id: 'modxmcp-set-upload_path_allowlist', anchor: '100%', height: 60 },
+                desc('modxmcp.set.upload_path_allowlist_desc'),
+                { xtype: 'textfield', fieldLabel: _('modxmcp.set.upload_extension_allowlist'),
+                  id: 'modxmcp-set-upload_extension_allowlist', anchor: '100%' },
+                desc('modxmcp.set.upload_extension_allowlist_desc'),
+                { xtype: 'numberfield', fieldLabel: _('modxmcp.set.upload_max_bytes'),
+                  id: 'modxmcp-set-upload_max_bytes', width: 160, allowNegative: false },
+                desc('modxmcp.set.upload_max_bytes_desc'),
+                { xtype: 'textfield', fieldLabel: _('modxmcp.set.upload_source_allowlist'),
+                  id: 'modxmcp-set-upload_source_allowlist', anchor: '60%' },
+                desc('modxmcp.set.upload_source_allowlist_desc')
+            ]
+        }, {
+            xtype: 'fieldset',
             title: _('modxmcp.settings.generic_access'),
             items: [
                 { xtype: 'textarea', fieldLabel: _('modxmcp.set.read_class_allowlist'),
@@ -67,7 +84,9 @@ Ext.reg('modxmcp-panel-settings', MODxMCP.panel.Settings);
 MODxMCP.SETTING_KEYS = [
     'site_notes',
     'enabled', 'log_arguments', 'audit_retention_days', 'discovery_cache_seconds',
-    'trusted_proxy_header', 'read_class_allowlist', 'write_class_allowlist'
+    'trusted_proxy_header', 'read_class_allowlist', 'write_class_allowlist',
+    'upload_path_allowlist', 'upload_extension_allowlist', 'upload_max_bytes',
+    'upload_source_allowlist'
 ];
 
 MODxMCP.loadSettings = function () {

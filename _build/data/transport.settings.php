@@ -62,6 +62,30 @@ $entries = [
         'xtype' => 'textarea',
         'area'  => 'modxmcp.main',
     ],
+    'modxmcp.upload_path_allowlist' => [
+        // Empty means file uploads are off. Same reasoning as the class
+        // allowlists: a tool that can drop files anywhere under the web root
+        // must be something an administrator turned on, never something an
+        // upgrade handed out.
+        'value' => '',
+        'xtype' => 'textarea',
+        'area'  => 'modxmcp.uploads',
+    ],
+    'modxmcp.upload_extension_allowlist' => [
+        'value' => 'jpg, jpeg, png, gif, webp, avif, pdf',
+        'xtype' => 'textfield',
+        'area'  => 'modxmcp.uploads',
+    ],
+    'modxmcp.upload_max_bytes' => [
+        'value' => '10485760',
+        'xtype' => 'textfield',
+        'area'  => 'modxmcp.uploads',
+    ],
+    'modxmcp.upload_source_allowlist' => [
+        'value' => '1',
+        'xtype' => 'textfield',
+        'area'  => 'modxmcp.uploads',
+    ],
     'modxmcp.read_class_allowlist' => [
         'value' => '',
         'xtype' => 'textarea',

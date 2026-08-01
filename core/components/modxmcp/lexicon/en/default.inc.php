@@ -61,6 +61,7 @@ $_lang['modxmcp.settings']                  = 'Settings';
 $_lang['modxmcp.settings.save']             = 'Save settings';
 $_lang['modxmcp.settings.saved']            = 'Settings saved.';
 $_lang['modxmcp.settings.general']          = 'General';
+$_lang['modxmcp.settings.uploads']          = 'File uploads';
 $_lang['modxmcp.settings.generic_access']   = 'Generic object access';
 
 $_lang['modxmcp.set.enabled']               = 'Endpoint enabled';
@@ -80,6 +81,15 @@ $_lang['modxmcp.set.read_class_allowlist_desc'] = 'Classes generic object reads 
 $_lang['modxmcp.set.write_class_allowlist'] = 'Writable classes';
 $_lang['modxmcp.set.write_class_allowlist_desc'] = 'Classes generic object writes may touch. Empty means none. Users, sessions, access-control rules, system settings and modxmcp own tables can never be reached whatever is listed here, and resources and elements can never be written this way because that would bypass the MODX processors.';
 
+$_lang['modxmcp.set.upload_path_allowlist'] = 'Upload directories';
+$_lang['modxmcp.set.upload_path_allowlist_desc'] = 'Directories the file upload tool may write into, relative to the media source root. Empty means uploads are disabled. Comma or space separated; a trailing * matches a prefix, e.g. images/uploads/*. The media source access policy and the MODX upload settings still apply on top.';
+$_lang['modxmcp.set.upload_extension_allowlist'] = 'Upload extensions';
+$_lang['modxmcp.set.upload_extension_allowlist_desc'] = 'File extensions uploads may carry. PHP and other server-executable extensions are blocked outright, in every dot-segment of the name, and cannot be enabled here.';
+$_lang['modxmcp.set.upload_max_bytes'] = 'Upload size limit (bytes)';
+$_lang['modxmcp.set.upload_max_bytes_desc'] = 'Decoded size cap for one upload. The MODX upload_maxsize system setting applies as well; the stricter of the two wins.';
+$_lang['modxmcp.set.upload_source_allowlist'] = 'Upload media sources';
+$_lang['modxmcp.set.upload_source_allowlist_desc'] = 'Ids of the media sources uploads may target. The default filesystem source is 1.';
+
 $_lang['modxmcp.stats.tokens']              = 'Tokens';
 $_lang['modxmcp.stats.audit']               = 'Audit rows';
 $_lang['modxmcp.stats.failed']              = 'rejected';
@@ -89,6 +99,8 @@ $_lang['modxmcp.stats.failed']              = 'rejected';
 $_lang['modxmcp.scope.read']              = 'read - inspect resources, elements and schemas';
 $_lang['modxmcp.scope.write_content']     = 'write:content - create, update and delete resources';
 $_lang['modxmcp.scope.write_elements']    = 'write:elements - create, update and delete chunks, snippets, templates, TVs and plugins';
+$_lang['modxmcp.scope.write_media']       = 'write:media - upload files into allowlisted directories';
+$_lang['modxmcp.scope.write_media_desc']  = 'Grants nothing on its own: uploads are also gated by the upload directories list on the Settings tab, which is empty by default.';
 $_lang['modxmcp.scope.write_objects']     = 'write:objects - generic writes to allowlisted extra classes';
 $_lang['modxmcp.scope.write_objects_desc'] = 'Grants nothing on its own: generic access is also gated per class by the writable-classes list on the Settings tab, which is empty by default.';
 $_lang['modxmcp.audit.failures_only']     = 'Rejected only';

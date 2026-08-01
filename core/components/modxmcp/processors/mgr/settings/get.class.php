@@ -27,6 +27,10 @@ class ModxmcpSettingsGetProcessor extends Processor
         'modxmcp.site_notes',
         'modxmcp.read_class_allowlist',
         'modxmcp.write_class_allowlist',
+        'modxmcp.upload_path_allowlist',
+        'modxmcp.upload_extension_allowlist',
+        'modxmcp.upload_max_bytes',
+        'modxmcp.upload_source_allowlist',
     ];
 
     public function process()

@@ -93,6 +93,14 @@ final class AuditLogger
     }
 
     /**
+     * Argument keys whose values are replaced before logging. File content is
+     * the reason this exists: with log_arguments on, a single upload would
+     * otherwise write up to 16 KB of base64 into every audit row it touches,
+     * and the audit log is for "who did what", never for payload storage.
+     */
+    private const REDACTED_KEYS = ['content_base64'];
+
+    /**
      * @param mixed $arguments
      */
     private function encodeArguments($arguments): ?string
@@ -100,12 +108,35 @@ final class AuditLogger
         if (!$this->logArguments || $arguments === null || $arguments === []) {
             return null;
         }
+        if (is_array($arguments)) {
+            $arguments = $this->redact($arguments);
+        }
         $json = json_encode($arguments, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         if ($json === false) {
             return null;
         }
         // Bounded so one oversized call cannot bloat the table.
         return strlen($json) > 16000 ? substr($json, 0, 16000) . '...[truncated]' : $json;
+    }
+
+    /**
+     * @param array<mixed> $arguments
+     * @return array<mixed>
+     */
+    private function redact(array $arguments): array
+    {
+        foreach ($arguments as $key => $value) {
+            if (is_string($key) && in_array($key, self::REDACTED_KEYS, true)) {
+                $arguments[$key] = is_string($value)
+                    ? '[redacted ' . strlen($value) . ' chars]'
+                    : '[redacted]';
+                continue;
+            }
+            if (is_array($value)) {
+                $arguments[$key] = $this->redact($value);
+            }
+        }
+        return $arguments;
     }
 
     /**

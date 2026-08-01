@@ -88,6 +88,10 @@ final class Runtime
         $registry->register(new Tools\ObjectSaveTool());
         $registry->register(new Tools\ObjectDeleteTool());
 
+        // Files. One tool, and the only one that ships disabled: the path
+        // allowlist it is gated on is empty until an administrator fills it in.
+        $registry->register(new Tools\FileUploadTool());
+
         // Maintenance
         $registry->register(new Tools\CacheRefreshTool());
 

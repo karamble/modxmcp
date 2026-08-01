@@ -675,6 +675,93 @@ $msg = $dupe['error']['message'] ?? ($dupe['result']['error'] ?? '');
 check('processor field errors reach the caller',
     stripos((string) $msg, 'alias') !== false, substr((string) $msg, 0, 60));
 
+// --- file upload -------------------------------------------------------------
+//
+// The refusal probes are deterministic on every site because they fail before
+// any site-configurable gate. The lifecycle needs a directory the site has
+// allowlisted in modxmcp.upload_path_allowlist, passed as argv[3]; without it
+// those cases are skipped rather than failed, and on a site with the default
+// (empty) allowlist the disabled-by-default refusal is asserted instead.
+$probe = call($url, $token, 'modxmcp_file_upload', [
+    'path' => '../evil/', 'filename' => 'a.jpg', 'content_base64' => base64_encode('x'),
+]);
+$probeMsg = (string) ($probe['error']['message'] ?? ($probe['result']['error'] ?? ''));
+if (stripos($probeMsg, 'scope') !== false) {
+    skip('file_upload suite', 'token lacks the write:media scope');
+} else {
+    check('a traversal path is refused', stripos($probeMsg, '..') !== false, substr($probeMsg, 0, 60));
+
+    $seg = call($url, $token, 'modxmcp_file_upload', [
+        'path' => 'images/', 'filename' => 'shell.php.jpg', 'content_base64' => base64_encode('x'),
+    ]);
+    $segMsg = (string) ($seg['error']['message'] ?? '');
+    check('a php dot-segment is refused whatever the final extension',
+        stripos($segMsg, 'segment') !== false || stripos($segMsg, 'blocked') !== false,
+        substr($segMsg, 0, 60));
+
+    $sep = call($url, $token, 'modxmcp_file_upload', [
+        'path' => 'images/', 'filename' => 'a/b.jpg', 'content_base64' => base64_encode('x'),
+    ]);
+    check('a directory separator in the filename is refused',
+        $sep['error'] !== null || !empty($sep['isError']));
+
+    $uploadDir = isset($argv[3]) ? trim((string) $argv[3]) : '';
+    if ($uploadDir === '') {
+        $closed = call($url, $token, 'modxmcp_file_upload', [
+            'path' => 'images/', 'filename' => 'probe.jpg', 'content_base64' => base64_encode('x'),
+        ]);
+        $closedMsg = (string) ($closed['error']['message'] ?? '');
+        if (stripos($closedMsg, 'upload_path_allowlist') !== false) {
+            check('uploads are disabled by default and the refusal names the setting', true);
+        } else {
+            skip('file_upload lifecycle', 'pass an allowlisted directory as argv[3] to run it');
+        }
+    } else {
+        // Smallest valid PNG there is; content sniffing must agree with .png.
+        $png  = base64_decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+        );
+        $name = 'modxmcp-upload-test-' . $sfx . '.png';
+
+        $up = call($url, $token, 'modxmcp_file_upload', [
+            'path' => $uploadDir, 'filename' => $name, 'content_base64' => base64_encode($png),
+        ]);
+        check('file_upload stores a file', ($up['result']['uploaded'] ?? null) === true,
+            $up['error']['message'] ?? '');
+        check('the result is verified and sized', ($up['result']['size'] ?? 0) === strlen($png));
+        check('the result carries a public url', ($up['result']['url'] ?? '') !== '');
+
+        if (($up['result']['url'] ?? '') !== '') {
+            $fetched = @file_get_contents($up['result']['url']);
+            check('the stored file round-trips over HTTP', $fetched === $png);
+        }
+
+        $dupe = call($url, $token, 'modxmcp_file_upload', [
+            'path' => $uploadDir, 'filename' => $name, 'content_base64' => base64_encode($png),
+        ]);
+        $dupeMsg = (string) ($dupe['error']['message'] ?? '');
+        check('a second upload without overwrite is refused and says how to proceed',
+            stripos($dupeMsg, 'overwrite') !== false, substr($dupeMsg, 0, 60));
+
+        $over = call($url, $token, 'modxmcp_file_upload', [
+            'path' => $uploadDir, 'filename' => $name,
+            'content_base64' => base64_encode($png), 'overwrite' => true,
+        ]);
+        check('overwrite: true replaces the file', ($over['result']['overwritten'] ?? null) === true,
+            $over['error']['message'] ?? '');
+
+        $php = call($url, $token, 'modxmcp_file_upload', [
+            'path' => $uploadDir, 'filename' => 'note.pdf',
+            'content_base64' => base64_encode('%PDF-1.4 <?php echo 1; ?>'),
+        ]);
+        check('content with a PHP open tag is refused whatever the extension',
+            $php['error'] !== null || !empty($php['isError']));
+
+        echo "  NOTE: '{$uploadDir}{$name}' was left on the site; there is no remove tool, "
+            . "so delete it in the Manager when convenient.\n";
+    }
+}
+
 // --- cleanup -----------------------------------------------------------------
 if ($newId > 0) {
     $deleted = call($url, $token, 'modxmcp_resource_delete', ['id' => $newId]);

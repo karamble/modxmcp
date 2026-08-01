@@ -421,3 +421,38 @@ First stable release. Everything below is in addition to the beta5 entry.
 - Test coverage for the five tools neither suite touched: object_list (which
   carries the beta2 SQL-injection fix and had no regression test), object_save,
   schema_list, schema_describe and updates, plus the snippet element type.
+
+1.1.0-pl
+========
+
+- New modxmcp_file_upload tool: one file per call, base64-encoded, written
+  through the Browser/File/Upload processor so the media source access
+  policy, the upload_files and upload_maxsize settings and the
+  OnFileManagerBeforeUpload / OnFileManagerUpload events all apply exactly
+  as they would for a Manager upload. The processor reads $_FILES, which is
+  swapped in around the one call and restored in a finally block; Flysystem
+  underneath reads the staged temp file with file_get_contents(), not
+  move_uploaded_file(), which is what makes this possible without touching
+  MODX.
+- Ships disabled. Four new settings on the Settings tab gate it, and the
+  directory list is empty on install: modxmcp.upload_path_allowlist (empty
+  means no uploads), modxmcp.upload_extension_allowlist (default images and
+  pdf), modxmcp.upload_max_bytes (default 10 MB, decoded) and
+  modxmcp.upload_source_allowlist (default the filesystem source). Every
+  refusal names the setting an administrator must edit.
+- New write:media token scope, offered as a checkbox on token creation.
+  Existing tokens do not gain the scope by upgrading.
+- Server-executable extensions (php and variants, phtml, phar, shtml, cgi,
+  asp, jsp, htaccess, htpasswd, ini for .user.ini) are blocked in EVERY
+  dot-segment of the filename, not just the last one, because an Apache
+  AddHandler matches inner segments and "shell.php.jpg" is the classic way
+  an upload gate gets outrun. No setting can enable them. Content containing
+  a PHP open tag is refused whatever the name says.
+- Uploads are verified by reading the file back through the media source
+  after the processor reports success, because uploadObjectsToContainer can
+  skip a file without recording an error, and a success that wrote nothing
+  is this extra's least favourite failure mode. Overwrites are opt-in and go
+  through Browser/File/Remove first, so removal events fire too.
+- The audit log now redacts content_base64 before storing arguments, so an
+  upload with log_arguments enabled records who wrote which path, never a
+  payload dump.

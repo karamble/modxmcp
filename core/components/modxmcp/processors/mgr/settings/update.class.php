@@ -26,6 +26,10 @@ class ModxmcpSettingsUpdateProcessor extends Processor
         'site_notes'           => 'string',
         'read_class_allowlist'   => 'list',
         'write_class_allowlist'  => 'list',
+        'upload_path_allowlist'  => 'list',
+        'upload_extension_allowlist' => 'list',
+        'upload_max_bytes'       => 'int',
+        'upload_source_allowlist' => 'list',
     ];
 
     public function process()

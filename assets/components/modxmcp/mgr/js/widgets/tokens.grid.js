@@ -95,6 +95,10 @@ MODxMCP.createToken = function () {
                       id: 'modxmcp-scope-write-content' },
                     { xtype: 'xcheckbox', boxLabel: _('modxmcp.scope.write_elements'),
                       id: 'modxmcp-scope-write-elements' },
+                    { xtype: 'xcheckbox', boxLabel: _('modxmcp.scope.write_media'),
+                      id: 'modxmcp-scope-write-media' },
+                    { xtype: 'displayfield', value: _('modxmcp.scope.write_media_desc'),
+                      cls: 'desc-under' },
                     { xtype: 'xcheckbox', boxLabel: _('modxmcp.scope.write_objects'),
                       id: 'modxmcp-scope-write-objects' },
                     { xtype: 'displayfield', value: _('modxmcp.scope.write_objects_desc'),
@@ -128,6 +132,7 @@ MODxMCP.createToken = function () {
                     if (Ext.getCmp('modxmcp-scope-read').getValue()) { scopes.push('read'); }
                     if (Ext.getCmp('modxmcp-scope-write-content').getValue()) { scopes.push('write:content'); }
                     if (Ext.getCmp('modxmcp-scope-write-elements').getValue()) { scopes.push('write:elements'); }
+                    if (Ext.getCmp('modxmcp-scope-write-media').getValue()) { scopes.push('write:media'); }
                     if (Ext.getCmp('modxmcp-scope-write-objects').getValue()) { scopes.push('write:objects'); }
 
                     form.getForm().submit({
