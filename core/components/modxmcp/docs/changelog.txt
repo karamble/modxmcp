@@ -212,6 +212,38 @@ Additions
   resource using that template, and nothing else in the tool surface exposed the
   relationship.
 
+- modxmcp_updates. Reports the extras installed on this site with their versions
+  and whether MODX or any extra is behind, reading the same cache the Manager
+  dashboard shows rather than contacting anyone. No outbound request, and it
+  cannot disagree with what an administrator sees.
+
+  There is no "update available" column to read: modTransportPackage stores
+  version and provider and nothing about newer releases. MODX answers this in two
+  places and both are used. The dashboard widget caches one combined entry under
+  mgr/providers/updates/modx-core covering MODX itself and the outdated extras by
+  name; the Extras grid separately caches a per-package count, and that is
+  preferred where present.
+
+  Every package reports one of three states: update_available, current, or
+  unknown. Unknown is not folded into current. Both caches expire, so a site
+  nobody has opened the dashboard on lately genuinely does not know, and saying
+  otherwise would be an assertion with nothing behind it. The response says how
+  many packages are unknown and what to do about it, and names
+  auto_check_pkg_updates when that setting is what is stopping the checks.
+
+  refresh=true asks the update service directly, using the same two processor
+  calls, cache key and TTL as the dashboard widget, so a refresh here is
+  indistinguishable from someone opening the dashboard. Off by default, since it
+  is the only part that touches the network.
+
+  Superseded rows are collapsed by default so each extra appears once at its
+  newest version, as the Extras grid does; MODX keeps every version ever
+  installed, which on a mature site is most of the rows.
+
+  It deliberately cannot install, update or uninstall anything. Applying an
+  update runs third-party code and changes database schema inside a web request,
+  which belongs in the Manager with a human watching.
+
 - modxmcp_search, over element bodies and resource content together. "Who calls
   [[$productCard]]?" is one question, and its answer is spread across template
   bodies, other chunks, snippets that build markup, and resource content where

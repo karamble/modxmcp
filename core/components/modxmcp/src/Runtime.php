@@ -90,6 +90,10 @@ final class Runtime
         // Maintenance
         $registry->register(new Tools\CacheRefreshTool());
 
+        // Read-only visibility of what is installed and what is behind. Reads
+        // MODX's own update cache; deliberately cannot install or update.
+        $registry->register(new Tools\UpdatesTool());
+
         self::registerAdapters($modx, $registry);
         self::invokeRegistrationEvent($modx, $registry);
 
