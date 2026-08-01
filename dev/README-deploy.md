@@ -55,6 +55,26 @@ need entries in `_build/data/transport.settings.php`, both
 `processors/mgr/settings/*.class.php`, the settings panel JS (the field **and**
 `MODxMCP.SETTING_KEYS`), and the lexicon.
 
+## Installing the package
+
+`Workspace/Packages/ScanLocal` registers any zip in `core/packages`, then
+`Workspace/Packages/Install` installs one **by signature**:
+
+```php
+$modx->runProcessor('Workspace/Packages/ScanLocal');
+$modx->runProcessor('Workspace/Packages/Install', ['signature' => 'modxmcp-1.0.0-pl']);
+```
+
+Pass the signature explicitly. `dev/package-install-test.php` resolves whichever
+modxmcp package it finds first, which on a machine carrying an older zip means it
+installs the older one — that happened during the 1.0.0 release and silently
+reverted a site to beta2. Delete superseded zips from `core/packages` before
+installing, or install by signature as above.
+
+The install is also what registers `OnMCPCollectAdvisories` and any new system
+setting, so a site running an rsynced tree has the code without the event row
+until a package is actually installed.
+
 ## Testing a deployed site
 
 Both suites talk to a live endpoint over HTTP and need a bearer token:
