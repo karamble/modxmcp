@@ -192,21 +192,53 @@ $badSwept = call($url, $token, 'modxmcp_resource_list', ['search' => $alias . '-
 check('a rejected class_key creates nothing',
     (int) ($badSwept['result']['total'] ?? 0) === 0);
 
+// The repair path this release exists for: a resource carrying the abstract base
+// type that earlier versions wrote on every create.
+$legacy = call($url, $token, 'modxmcp_resource_create', [
+    'pagetitle' => 'modxmcp tool test legacy',
+    'alias'     => $alias . '-legacy',
+    'class_key' => 'MODX\\Revolution\\modResource',
+]);
+$legacyId = (int) ($legacy['result']['id'] ?? 0);
+check('creating with the abstract base type warns about it',
+    (bool) array_filter($legacy['result']['warnings'] ?? [],
+        fn($w) => stripos($w, 'abstract base') !== false));
+
+$legacyRead = call($url, $token, 'modxmcp_resource_get', ['id' => $legacyId]);
+check('resource_get flags a legacy class_key so a site can be audited by reads',
+    (bool) array_filter($legacyRead['result']['warnings'] ?? [],
+        fn($w) => stripos($w, 'earlier versions of modxmcp') !== false));
+
+$retyped = call($url, $token, 'modxmcp_resource_update', [
+    'id'        => $legacyId,
+    'class_key' => DOC_CLASS,
+]);
+check('resource_update repairs a legacy class_key',
+    ($retyped['result']['class_key'] ?? '') === DOC_CLASS,
+    $retyped['error']['message'] ?? '');
+check('a class_key change warns that nothing is migrated',
+    (bool) array_filter($retyped['result']['warnings'] ?? [],
+        fn($w) => stripos($w, 'migrated') !== false));
+
+$confirmed = call($url, $token, 'modxmcp_resource_get', ['id' => $legacyId]);
+check('the repaired resource reads back as modDocument',
+    ($confirmed['result']['class_key'] ?? '') === DOC_CLASS);
+
+// Changing away from a redirecting type is declined rather than attempted:
+// modWebLink::process() ends in sendRedirect(), which exits, so MODX would
+// apply the change and then kill the response before the caller saw it.
 if ($weblinkId > 0) {
-    $retyped = call($url, $token, 'modxmcp_resource_update', [
+    $fromWeblink = call($url, $token, 'modxmcp_resource_update', [
         'id'        => $weblinkId,
         'class_key' => DOC_CLASS,
     ]);
-    check('resource_update changes class_key',
-        ($retyped['result']['class_key'] ?? '') === DOC_CLASS,
-        'this is the repair path for resources created by earlier versions');
-    check('a class_key change warns that nothing is migrated',
-        (bool) array_filter($retyped['result']['warnings'] ?? [],
-            fn($w) => stripos($w, 'migrated') !== false));
+    check('changing away from a weblink is declined, not attempted blind',
+        !empty($fromWeblink['isError']) || $fromWeblink['error'] !== null,
+        'a write whose response is lost cannot be confirmed by the caller');
 
-    $confirmed = call($url, $token, 'modxmcp_resource_get', ['id' => $weblinkId]);
-    check('the re-typed resource reads back as modDocument',
-        ($confirmed['result']['class_key'] ?? '') === DOC_CLASS);
+    $stillWeblink = call($url, $token, 'modxmcp_resource_get', ['id' => $weblinkId]);
+    check('the declined change left the weblink untouched',
+        ($stillWeblink['result']['class_key'] ?? '') === 'MODX\\Revolution\\modWebLink');
 }
 
 // --- template variables ------------------------------------------------------
@@ -214,7 +246,8 @@ if ($weblinkId > 0) {
 // A TV that exists but is not attached to the resource's template used to be
 // accepted, encoded as tv{id} and then discarded inside the processor's
 // template-joined loop, so the call reported success and wrote nothing.
-$strayTv = 'modxmcpToolTestTv';
+$sfx     = substr($alias, -8);
+$strayTv = 'modxmcpToolTestTv' . $sfx;
 $tvSaved = call($url, $token, 'modxmcp_element_save', [
     'type'    => 'tv',
     'name'    => $strayTv,
@@ -305,7 +338,7 @@ check('unknown element type is rejected clearly',
 //
 // A plugin bound to no events is never executed and a TV attached to no template
 // renders nowhere, yet both used to save with a clean success.
-$catName  = 'modxmcpToolTestCategory';
+$catName  = 'modxmcpToolTestCategory' . $sfx;
 $catSaved = call($url, $token, 'modxmcp_category_save', ['name' => $catName]);
 $catId    = (int) ($catSaved['result']['id'] ?? 0);
 check('category_save creates a category', $catId > 0, $catSaved['error']['message'] ?? '');
@@ -315,7 +348,7 @@ check('category_list finds it by name',
     (bool) array_filter($catList['result']['categories'] ?? [],
         fn($c) => ($c['name'] ?? '') === $catName));
 
-$categorised = 'modxmcpToolTestCategorised';
+$categorised = 'modxmcpToolTestCategorised' . $sfx;
 $byName = call($url, $token, 'modxmcp_element_save', [
     'type'     => 'chunk',
     'name'     => $categorised,
@@ -333,7 +366,7 @@ $badCat = call($url, $token, 'modxmcp_element_save', [
 check('an unknown category name is refused, not created',
     !empty($badCat['isError']) || $badCat['error'] !== null);
 
-$pluginName  = 'modxmcpToolTestPlugin';
+$pluginName  = 'modxmcpToolTestPlugin' . $sfx;
 $boundPlugin = call($url, $token, 'modxmcp_element_save', [
     'type'    => 'plugin',
     'name'    => $pluginName,
@@ -392,15 +425,15 @@ if ($anyTemplate > 0) {
 //
 // The question this exists for is "who calls this element", which has to be
 // answered before any rename and which nothing else in the surface could answer.
-$needleChunk = 'modxmcpToolTestCalled';
+$needleChunk = 'modxmcpToolTestCalled' . $sfx;
 call($url, $token, 'modxmcp_element_save', [
     'type' => 'chunk', 'name' => $needleChunk, 'content' => 'x',
 ]);
-$callerChunk = 'modxmcpToolTestCaller';
+$callerChunk = 'modxmcpToolTestCaller' . $sfx;
 call($url, $token, 'modxmcp_element_save', [
     'type'    => 'chunk',
     'name'    => $callerChunk,
-    'content' => "before [[\$modxmcpToolTestCalled]] after\nsecond [[!modxmcpToolTestCalled]] line",
+    'content' => "before [[\${$needleChunk}]] after\nsecond [[!{$needleChunk}]] line",
 ]);
 
 $refs = call($url, $token, 'modxmcp_search', [
@@ -465,12 +498,17 @@ check('element delete reports it is NOT recoverable',
     ($chunkDeleted['result']['recoverable'] ?? null) === false);
 
 // Fixtures from the class_key, TV and binding sections.
-foreach ([$shortId ?? 0, $weblinkId ?? 0] as $extraId) {
+foreach ([$shortId ?? 0, $weblinkId ?? 0, $legacyId ?? 0] as $extraId) {
     if ((int) $extraId > 0) {
         call($url, $token, 'modxmcp_resource_delete', ['id' => (int) $extraId]);
     }
 }
-call($url, $token, 'modxmcp_element_delete', ['type' => 'tv', 'name' => $strayTv]);
+// MODX refuses to remove a TV that is still attached to a template, so detach
+// it first. Passing an empty list means "attached to nothing".
+call($url, $token, 'modxmcp_element_save', ['type' => 'tv', 'name' => $strayTv, 'templates' => []]);
+$tvGone = call($url, $token, 'modxmcp_element_delete', ['type' => 'tv', 'name' => $strayTv]);
+check('a TV can be detached and then deleted', empty($tvGone['isError']) && $tvGone['error'] === null,
+    $tvGone['error']['message'] ?? '');
 call($url, $token, 'modxmcp_element_delete', ['type' => 'plugin', 'name' => $pluginName]);
 call($url, $token, 'modxmcp_element_delete', ['type' => 'chunk', 'name' => $categorised]);
 // The category last: deleting it earlier would orphan the chunk filed under it.

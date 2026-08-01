@@ -127,6 +127,23 @@ Fixes
   xPDO::save() writes against its content, bypassing the processors this extra
   exists to route through. The guard now tests ancestry.
 
+- resource_update never wrote a template variable at all. Long-standing, and
+  found by the new tvs echo on the first live run.
+
+  Resource/Update::saveTemplateVariables() opens with getProperty('tvs') and
+  skips the whole block when it is empty, so the tv{id} properties it is given
+  are ignored without it. The Manager form posts tvs=1 and nothing documents
+  that the flag is load-bearing. Resource/Create has no such gate, which is why
+  creating with TVs always worked and updating with them silently never did.
+
+- Changing a resource away from modWebLink or modSymLink is now declined.
+  MODX renders the old type while saving, and those types end their render by
+  issuing their own redirect and calling exit, so the change was applied and
+  then the HTTP response was destroyed before the caller saw it. A write whose
+  outcome cannot be observed is the failure this release is about, so the tool
+  refuses and names the alternative. Changing TO those types is unaffected, as
+  is the modResource repair path.
+
 - Changing template and template variables in one resource_update call resolved
   the TVs against the OLD template, resubmitting values MODX then discarded.
   They are now resolved against the template the resource will have, and the

@@ -198,6 +198,47 @@ trait ResourceClassSupport
     }
 
     /**
+     * Refuse a type change that MODX core would turn into a lost response.
+     *
+     * modWebLink::process() and modSymLink::process() end in
+     * modX::sendRedirect(), which sends headers and exits. Changing a resource
+     * away from one of those types makes something in the update path render
+     * the old object, so the request dies with the weblink's own 301 and the
+     * caller gets an empty body. Confirmed against MODX 3.2.3: the write itself
+     * lands, only the response is lost.
+     *
+     * A write whose outcome the caller cannot observe is the exact failure this
+     * whole layer exists to remove, so the tool declines rather than performing
+     * it blind. Changing TO these types is unaffected, and so is every other
+     * transition, including the modResource repair this release is mostly for.
+     *
+     * @throws McpException
+     */
+    protected function guardRedirectingTypeChange(string $from, string $to): void
+    {
+        $redirecting = [
+            \MODX\Revolution\modWebLink::class,
+            \MODX\Revolution\modSymLink::class,
+        ];
+
+        if ($from === $to || !in_array($from, $redirecting, true)) {
+            return;
+        }
+
+        throw McpException::invalidParams(sprintf(
+            'Cannot change this resource from %s to %s through the API. MODX renders the old '
+            . 'type while saving, and %s ends its render by issuing its own redirect and '
+            . 'exiting, so the response would be lost and you could not tell whether the change '
+            . 'had been applied. Change the type in the Manager instead, or delete this resource '
+            . 'and create a new one with class_key="%s". Nothing was written.',
+            $from,
+            $to,
+            $from,
+            $to
+        ));
+    }
+
+    /**
      * Flag a resource still carrying the type older modxmcp versions wrote.
      *
      * Deliberately a warning and never an automatic rewrite. Normalising it

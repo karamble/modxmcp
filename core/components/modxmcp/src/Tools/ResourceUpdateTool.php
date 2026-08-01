@@ -128,6 +128,7 @@ final class ResourceUpdateTool extends AbstractTool
             $this->arg($arguments, 'class_key'),
             $originalClassKey
         );
+        $this->guardRedirectingTypeChange($originalClassKey, (string) $properties['class_key']);
 
         // Resolve TVs against the template the resource will HAVE, not the one it
         // had. The old code read them off the in-memory object after the template
@@ -146,6 +147,16 @@ final class ResourceUpdateTool extends AbstractTool
 
         if ($merged !== []) {
             $properties = array_replace($properties, $this->resolveTvs($modx, $merged, $targetTemplate));
+
+            // Resource/Update::saveTemplateVariables() opens with
+            // getProperty('tvs') and skips the entire block when it is empty, so
+            // the tv{id} properties above are ignored without it. The Manager
+            // form posts tvs=1 and nothing documents that it is load-bearing.
+            //
+            // Its absence meant resource_update silently never wrote a template
+            // variable. Resource/Create has no such gate, which is why creating
+            // with TVs always worked and updating with them never did.
+            $properties['tvs'] = 1;
         }
 
         $this->runProcessor($modx, 'Resource/Update', $properties);
