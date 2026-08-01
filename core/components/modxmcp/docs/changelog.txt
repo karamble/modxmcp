@@ -212,6 +212,23 @@ Additions
   resource using that template, and nothing else in the tool surface exposed the
   relationship.
 
+- modxmcp_resource_duplicate. Copies a resource and then re-saves the copy
+  through the normal update path.
+
+  That second step is the point. Resource/Duplicate extends the plain Processor
+  rather than CreateProcessor and fires only OnResourceDuplicate, so none of the
+  Manager save path runs for a copy: SeoSuite never registers it and it is
+  silently missing from sitemap.xml, Collections never applies its rules, and the
+  cache is never cleared. A thin wrapper would have shipped exactly the bug this
+  extra exists to prevent.
+
+  Core's property names are inconsistent (name, duplicate_children,
+  prefixDuplicate, published_mode); the tool presents one convention. MODX does
+  not accept a parent when duplicating, so the copy always lands beside the
+  original and the description says to move it afterwards. On an alias collision
+  MODX empties the alias rather than making it unique, and with friendly URLs off
+  does not check at all; both cases are now warned about.
+
 - modxmcp_updates. Reports the extras installed on this site with their versions
   and whether MODX or any extra is behind, reading the same cache the Manager
   dashboard shows rather than contacting anyone. No outbound request, and it

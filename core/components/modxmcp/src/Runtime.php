@@ -57,6 +57,7 @@ final class Runtime
         $registry->register(new Tools\ResourceCreateTool());
         $registry->register(new Tools\ResourceUpdateTool());
         $registry->register(new Tools\ResourceDeleteTool());
+        $registry->register(new Tools\ResourceDuplicateTool());
 
         // Elements, all five types behind one discriminated set.
         $registry->register(new Tools\ElementListTool());
