@@ -36,10 +36,10 @@ MODxMCP.panel.Settings = function (config) {
                 desc('modxmcp.set.discovery_cache_seconds_desc'),
                 { xtype: 'textfield', fieldLabel: _('modxmcp.set.trusted_proxy_header'),
                   id: 'modxmcp-set-trusted_proxy_header', anchor: '60%' },
-                desc('modxmcp.set.trusted_proxy_header_desc')
+                desc('modxmcp.set.trusted_proxy_header_desc'),
                 { xtype: 'textarea', fieldLabel: _('modxmcp.set.site_notes'),
-                    id: 'modxmcp-set-site_notes', anchor: '100%', height: 90 },
-                desc('modxmcp.set.site_notes_desc'),
+                  id: 'modxmcp-set-site_notes', anchor: '100%', height: 90 },
+                desc('modxmcp.set.site_notes_desc')
             ]
         }, {
             xtype: 'fieldset',
