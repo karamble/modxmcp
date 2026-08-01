@@ -422,9 +422,6 @@ First stable release. Everything below is in addition to the beta5 entry.
   carries the beta2 SQL-injection fix and had no regression test), object_save,
   schema_list, schema_describe and updates, plus the snippet element type.
 
-1.1.0-pl
-========
-
 - New modxmcp_file_upload tool: one file per call, base64-encoded, written
   through the Browser/File/Upload processor so the media source access
   policy, the upload_files and upload_maxsize settings and the
