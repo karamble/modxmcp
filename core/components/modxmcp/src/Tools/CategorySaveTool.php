@@ -73,10 +73,27 @@ final class CategorySaveTool extends AbstractTool
 
         $object = $this->runProcessor($modx, $action, $properties);
 
+        // Re-read rather than trust the echo. The '?? $properties' fallbacks this
+        // replaces were the tell: they existed because Element/Category/Create
+        // does not reliably return these fields, which is the same doubt
+        // ResourceSupport::summarise() acts on for resources.
+        $savedId = (int) ($object['id'] ?? 0);
+        if ($savedId <= 0) {
+            throw McpException::internal(
+                'The category processor reported success without returning an id, so the save '
+                . 'cannot be confirmed. Check modxmcp_category_list.');
+        }
+
+        /** @var modCategory|null $saved */
+        $saved = $modx->getObject(modCategory::class, $savedId);
+        if (!$saved) {
+            throw McpException::internal("Category {$savedId} could not be read back after saving");
+        }
+
         return [
-            'id'      => (int) ($object['id'] ?? 0),
-            'name'    => (string) ($object['category'] ?? $properties['category'] ?? ''),
-            'parent'  => (int) ($object['parent'] ?? $properties['parent'] ?? 0),
+            'id'      => $savedId,
+            'name'    => (string) $saved->get('category'),
+            'parent'  => (int) $saved->get('parent'),
             'created' => $existing === null,
         ];
     }

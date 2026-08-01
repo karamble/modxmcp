@@ -65,6 +65,7 @@ final class ResourceUpdateTool extends AbstractTool
                 'hidemenu'    => Schema::boolean('Hide from menus.'),
                 'menuindex'   => Schema::integer('Sort position among siblings.'),
                 'show_in_tree' => Schema::boolean('Show in the resource tree.'),
+                ...$this->publishSchema(),
                 'class_key'   => Schema::string(
                     'Change the resource type. Same values as modxmcp_resource_create. No '
                     . 'type-specific data is migrated: the content field means something '
@@ -130,6 +131,9 @@ final class ResourceUpdateTool extends AbstractTool
         );
         $this->guardRedirectingTypeChange($originalClassKey, (string) $properties['class_key']);
 
+        // Throws on an unreadable date, before the processor runs.
+        $publishWarnings = $this->applyPublishDates($arguments, $properties, $resource->toArray());
+
         // Resolve TVs against the template the resource will HAVE, not the one it
         // had. The old code read them off the in-memory object after the template
         // had already been overwritten in $properties, so a call changing template
@@ -182,8 +186,15 @@ final class ResourceUpdateTool extends AbstractTool
                 $originalAlias,
                 $newAlias,
                 $originalUri,
+                // Name the tool, not just the extra. Telling a caller a redirect
+                // is missing while it is holding the tool that creates one is a
+                // dead end it has no way to get out of.
                 $modx->getObject(\MODX\Revolution\modNamespace::class, ['name' => 'seosuite'])
-                    ? ' (SeoSuite is installed and manages redirects for this site)'
+                    ? sprintf(
+                        ' with modxmcp_seo_redirect {"old_url": "%s", "resource_id": %d}',
+                        $originalUri,
+                        $id
+                    )
                     : ''
             );
         }
@@ -201,7 +212,12 @@ final class ResourceUpdateTool extends AbstractTool
 
         $warnings = array_merge(
             $warnings,
-            $this->templateChangeWarnings($modx, $originalTemplate, $targetTemplate)
+            $this->templateChangeWarnings($modx, $originalTemplate, $targetTemplate),
+            $publishWarnings,
+            // $result is the re-read row. A missing publish_document permission
+            // reverts these fields and still reports success, so the comparison
+            // after the write is the only way to see it.
+            $this->publishStateWarnings($modx, $arguments, $properties, $result)
         );
 
         $result['warnings'] = $warnings;

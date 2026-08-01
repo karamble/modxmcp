@@ -127,6 +127,35 @@ trait ElementSupport
     }
 
     /**
+     * Describe an element by re-reading it after a write.
+     *
+     * The same argument ResourceSupport::summarise() makes for resources, which
+     * had not been applied here: the processors cannot be trusted to echo what
+     * they saved. Element/*::cleanup() returns a hand-picked subset that omits
+     * static, static_file and source entirely, so those could never be confirmed
+     * from a response, and modElement::toArray() emits a virtual `content` key
+     * alongside the real column, so the echo is a structure with a known
+     * shadow-field problem.
+     *
+     * A processor that returns success having written nothing is not
+     * hypothetical here. Resource/Update did exactly that for template variables
+     * for the whole life of this extra.
+     *
+     * @param array{class:string,name:string,content:string} $type
+     * @return array<string,mixed>
+     * @throws McpException
+     */
+    protected function summariseElement(modX $modx, array $type, int $id, bool $includeContent): array
+    {
+        $element = $modx->getObject($type['class'], $id);
+        if (!$element) {
+            throw McpException::internal("Element {$id} could not be read back after saving");
+        }
+
+        return $this->normaliseElement($element->toArray(), $type, $includeContent);
+    }
+
+    /**
      * Refuse arguments that mean nothing for the type being saved.
      *
      * Two element types carry a binding that lives in its own table, and each

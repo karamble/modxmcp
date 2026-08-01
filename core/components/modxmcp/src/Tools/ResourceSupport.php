@@ -21,6 +21,7 @@ trait ResourceSupport
 {
     use ResourceClassSupport;
     use TemplateVarSupport;
+    use PublishDateSupport;
 
     /**
      * Fields returned for a resource. The full row is around forty columns,
@@ -32,6 +33,9 @@ trait ResourceSupport
         'id', 'pagetitle', 'longtitle', 'description', 'alias', 'uri', 'parent',
         'template', 'published', 'deleted', 'hidemenu', 'isfolder', 'menuindex',
         'context_key', 'class_key', 'content_type', 'publishedon', 'createdon', 'editedon',
+        // A scheduled resource looks unpublished and identical to a draft without
+        // these, which makes "did the schedule take" unanswerable from a response.
+        'pub_date', 'unpub_date',
     ];
 
     /**

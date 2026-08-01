@@ -241,6 +241,83 @@ if ($weblinkId > 0) {
         ($stillWeblink['result']['class_key'] ?? '') === 'MODX\\Revolution\\modWebLink');
 }
 
+// --- publish scheduling ------------------------------------------------------
+//
+// MODX parses these fields with a bare strtotime() and never validates the
+// result, so a bad value does not error: it reads as a date in the past and
+// publishes the resource immediately. Most of these assertions are about
+// refusing input rather than accepting it.
+$future = date('Y-m-d H:i:s', time() + 86400);
+
+$scheduled = call($url, $token, 'modxmcp_resource_create', [
+    'pagetitle' => 'modxmcp tool test scheduled',
+    'alias'     => $alias . '-sched',
+    'published' => false,
+    'pub_date'  => $future,
+]);
+$schedId = (int) ($scheduled['result']['id'] ?? 0);
+check('a resource can be scheduled', $schedId > 0 && empty($scheduled['isError']),
+    $scheduled['error']['message'] ?? '');
+check('a scheduled resource is not published yet', empty($scheduled['result']['published']));
+check('scheduling produced no spurious permission warning',
+    ($scheduled['result']['warnings'] ?? []) === [],
+    implode(' | ', $scheduled['result']['warnings'] ?? []));
+// pub_date is an int column with a `timestamp` phptype, so xPDO renders it
+// back as a 'Y-m-d H:i:s' string rather than the epoch the database holds.
+check('the schedule is stored and visible in the response',
+    strtotime((string) ($scheduled['result']['pub_date'] ?? '')) > time(),
+    'pub_date came back as ' . var_export($scheduled['result']['pub_date'] ?? null, true));
+
+// The dangerous case: strtotime() returns false for a bare number, which the
+// processor then reads as "in the past" and publishes.
+$epochString = call($url, $token, 'modxmcp_resource_create', [
+    'pagetitle' => 'modxmcp tool test epoch',
+    'alias'     => $alias . '-epoch',
+    'published' => false,
+    'pub_date'  => (string) (time() + 86400),
+]);
+check('a UNIX timestamp string is refused, not silently published',
+    !empty($epochString['isError']) || $epochString['error'] !== null,
+    'strtotime() fails on it and MODX would publish immediately');
+
+$badDate = call($url, $token, 'modxmcp_resource_create', [
+    'pagetitle' => 'modxmcp tool test baddate',
+    'alias'     => $alias . '-baddate',
+    'pub_date'  => 'whenever',
+]);
+check('an unreadable date is refused',
+    !empty($badDate['isError']) || $badDate['error'] !== null);
+
+// Publishing now and scheduling for later are contradictory; MODX resolves it
+// silently, so the tool states it.
+$contradiction = call($url, $token, 'modxmcp_resource_update', [
+    'id'        => $schedId,
+    'published' => true,
+    'pub_date'  => $future,
+]);
+check('published=true with a future pub_date is normalised and explained',
+    (bool) array_filter($contradiction['result']['warnings'] ?? [],
+        fn($w) => stripos($w, 'future') !== false));
+check('the normalised resource is still unpublished',
+    empty($contradiction['result']['published']));
+
+// publishedon is discarded by MODX unless `published` rides along in the same
+// call, which the tool supplies on the caller's behalf.
+$backdated = call($url, $token, 'modxmcp_resource_update', [
+    'id'          => $newId,
+    'publishedon' => '2026-01-15 08:00:00',
+]);
+check('publishedon survives without the caller sending published',
+    strtotime((string) ($backdated['result']['publishedon'] ?? '')) === strtotime('2026-01-15 08:00:00'),
+    'got ' . var_export($backdated['result']['publishedon'] ?? null, true));
+
+$byUser = call($url, $token, 'modxmcp_resource_update', [
+    'id'          => $newId,
+    'publishedby' => 1,
+]);
+check('publishedby is refused on update rather than accepted and dropped',
+    !empty($byUser['isError']) || $byUser['error'] !== null);
+
 // --- template variables ------------------------------------------------------
 //
 // A TV that exists but is not attached to the resource's template used to be
@@ -498,7 +575,7 @@ check('element delete reports it is NOT recoverable',
     ($chunkDeleted['result']['recoverable'] ?? null) === false);
 
 // Fixtures from the class_key, TV and binding sections.
-foreach ([$shortId ?? 0, $weblinkId ?? 0, $legacyId ?? 0] as $extraId) {
+foreach ([$shortId ?? 0, $weblinkId ?? 0, $legacyId ?? 0, $schedId ?? 0] as $extraId) {
     if ((int) $extraId > 0) {
         call($url, $token, 'modxmcp_resource_delete', ['id' => (int) $extraId]);
     }

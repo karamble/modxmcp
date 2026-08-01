@@ -61,6 +61,7 @@ final class ResourceCreateTool extends AbstractTool
                 'hidemenu'    => Schema::boolean('Hide from menus.', false),
                 'show_in_tree' => Schema::boolean('Show in the resource tree. Set false for children of a Collections container.', true),
                 'menuindex'   => Schema::integer('Sort position among siblings.', 0),
+                ...$this->publishSchema(),
                 'tvs'         => Schema::map(
                     'Template variable values keyed by TV name, e.g. {"articleimage": "assets/x.jpg"}. '
                     . 'Only TVs attached to the template you are creating with can be written. '
@@ -109,6 +110,10 @@ final class ResourceCreateTool extends AbstractTool
             $properties['show_in_tree'] = $showInTree;
         }
 
+        // Before the TV block so a bad date fails alongside a bad TV name, with
+        // nothing written either way.
+        $publishWarnings = $this->applyPublishDates($arguments, $properties);
+
         $tvs = $this->arg($arguments, 'tvs');
         $tvs = is_array($tvs) ? $tvs : [];
         if ($tvs !== []) {
@@ -129,7 +134,11 @@ final class ResourceCreateTool extends AbstractTool
         $result = $this->summarise($modx, $newId);
         $result['warnings'] = array_merge(
             $this->parentWarnings($modx, $parent, $showInTree),
-            $this->classKeyWarnings($modx, $classKey, false)
+            $this->classKeyWarnings($modx, $classKey, false),
+            $publishWarnings,
+            // $result is the re-read row, so this compares against what was
+            // actually stored rather than what the processor claimed.
+            $this->publishStateWarnings($modx, $arguments, $properties, $result)
         );
 
         // Only the names the caller passed. Echoing the template's whole TV set

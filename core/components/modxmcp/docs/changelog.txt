@@ -157,6 +157,32 @@ Fixes
 Additions
 ---------
 
+- pub_date, unpub_date and publishedon on resource_create and resource_update, so
+  a post can be scheduled. Previously nothing in the tool surface could set them
+  and every publish was immediate.
+
+  Dates are normalised before they reach MODX, which parses these fields with a
+  bare strtotime() and validates nothing. A UNIX timestamp sent as a string is
+  the trap: strtotime() returns false for it, the processor reads false as a date
+  in the past, and the resource publishes immediately instead of being scheduled.
+  Numeric strings are now refused with the correctly formatted date in the error.
+
+  publishedon is carried with the `published` value it needs, because MODX
+  discards it when `published` is absent from the same call. publishedby is
+  refused on update, where MODX overwrites it unconditionally.
+
+  A future pub_date together with published=true is normalised to unpublished and
+  explained in warnings; MODX resolves that contradiction the same way, silently.
+
+  resource_create and resource_update also report pub_date and unpub_date, which
+  is what makes "did the schedule take" answerable. Note these are int columns
+  with a `timestamp` phptype, so xPDO renders them back as 'Y-m-d H:i:s'.
+
+- The publish state is verified after the write. Without publish_document MODX
+  silently restores published, publishedon, pub_date and unpub_date to their
+  stored values and still reports success; the tool now compares the re-read row
+  against what was asked and says so.
+
 - class_key on resource_create and resource_update. Accepts short names
   (modWebLink) as well as fully-qualified ones, and validates against the
   resource types the site actually has, so Collections containers, weblinks,
@@ -216,6 +242,17 @@ Additions
   accepts a name as well as an id. A name that does not exist is refused rather
   than created, because auto-creating on save is how a site ends up with "Blog",
   "blog" and "Blog " as three separate categories.
+
+- element_save and category_save re-read the saved row instead of returning what
+  the processor echoed, which resource_create and resource_update already did.
+  Element cleanup() returns a hand-picked subset that omits static, static_file
+  and source entirely, so those could never be confirmed from a response, and
+  category_save had a '?? $properties' fallback that existed precisely because
+  the echo was already known to be unreliable. Both now fail loudly if the
+  processor reports success without returning an id.
+
+- The alias-change warning names modxmcp_seo_redirect and the arguments to call
+  it with, instead of only mentioning that SeoSuite is installed.
 
 Internal
 --------

@@ -155,13 +155,24 @@ final class ElementSaveTool extends AbstractTool
 
         $object = $this->runProcessor($modx, $action, $properties);
 
-        $result            = $this->normaliseElement($object, $type, false);
+        // The id is the only thing taken from the processor's echo, exactly as
+        // ResourceCreateTool does. Guarded because runProcessor() hands back the
+        // whole envelope when a processor omits `object`, and the Element
+        // processors are less uniform about that than the Resource ones, so a
+        // missing id would otherwise become a confident read of element 0.
+        $savedId = (int) ($object['id'] ?? 0);
+        if ($savedId <= 0) {
+            throw McpException::internal(sprintf(
+                "Processor '%s' reported success without returning an element id, so the save "
+                . 'cannot be confirmed. Read the element back with modxmcp_element_get.',
+                $action
+            ));
+        }
+
+        $saved             = $this->summariseElement($modx, $type, $savedId, false);
+        $result            = $saved;
         $result['type']    = $typeKey;
         $result['created'] = $created;
-
-        // Echo the bindings back, since they are the thing most likely to be
-        // wrong and the caller cannot otherwise see whether they landed.
-        $savedId = (int) ($object['id'] ?? 0);
         if ($typeKey === 'plugin' && $savedId > 0) {
             $result['events'] = array_column($this->pluginEvents($modx, $savedId), 'name');
         }
@@ -171,12 +182,15 @@ final class ElementSaveTool extends AbstractTool
 
         $warnings = [];
 
-        if (!empty($object['static'])) {
+        // From the re-read row, not the processor's echo: cleanup() does not
+        // return `static` at all, so the echo could never answer this.
+        if (!empty($saved['static'])) {
             $warnings[] = 'This element is static: MODX reads its body from disk, so this '
-                . 'database change will not take effect until the file is updated.';
+                . 'database change will not take effect until the file is updated. modxmcp '
+                . 'does not change which file that is.';
         }
 
-        $warnings = array_merge($warnings, $this->bindingWarnings($modx, $typeKey, $object));
+        $warnings = array_merge($warnings, $this->bindingWarnings($modx, $typeKey, $saved));
 
         if ($warnings !== []) {
             $result['warnings'] = $warnings;
