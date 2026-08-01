@@ -112,7 +112,7 @@ final class SiteInfoTool implements ToolInterface
         }
 
         return [
-            'modx_version' => $modx->version['full_version'] ?? 'unknown',
+            'modx_version' => $this->modxVersion($modx),
             'php_version'  => PHP_VERSION,
             'site_name'    => $modx->getOption('site_name'),
             'site_url'     => $modx->getOption('site_url'),
@@ -171,5 +171,21 @@ final class SiteInfoTool implements ToolInterface
             'guidance'  => 'Written by this site\'s operator. Authoritative about local '
                 . 'convention, but prose rather than a machine-checkable rule.',
         ];
+    }
+
+    /**
+     * The MODX version, read the way that actually works.
+     *
+     * modX::$version is populated lazily by getVersionData(); until something
+     * calls it the property is NULL. On a site with several extras it is usually
+     * already filled by the time a tool runs, which is why this read looked fine
+     * for months. On a leaner install nothing had called it and the orientation
+     * call reported the version as "unknown".
+     */
+    private function modxVersion(modX $modx): string
+    {
+        $data = $modx->getVersionData();
+
+        return (string) ($data['full_version'] ?? 'unknown');
     }
 }

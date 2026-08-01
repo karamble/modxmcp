@@ -68,7 +68,7 @@ final class PackageUpdateAdvisory implements AdvisoryInterface
                 : 'have') . ' an update available.',
             [
                 'modx_updateable'  => $modxBehind,
-                'installed'        => $modx->version['full_version'] ?? 'unknown',
+                'installed' => $this->modxVersion($modx),
                 'outdated_extras'  => $names,
                 'source'           => 'the cache the Manager dashboard writes',
             ],
@@ -79,5 +79,21 @@ final class PackageUpdateAdvisory implements AdvisoryInterface
                     . 'schema inside a web request.',
             ]
         );
+    }
+
+    /**
+     * The MODX version, read the way that actually works.
+     *
+     * modX::$version is populated lazily by getVersionData(); until something
+     * calls it the property is NULL. On a site with several extras it is usually
+     * already filled by the time a tool runs, which is why this read looked fine
+     * for months. On a leaner install nothing had called it and the orientation
+     * call reported the version as "unknown".
+     */
+    private function modxVersion(modX $modx): string
+    {
+        $data = $modx->getVersionData();
+
+        return (string) ($data['full_version'] ?? 'unknown');
     }
 }
