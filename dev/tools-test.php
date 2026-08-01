@@ -23,6 +23,7 @@ if ($url === '' || $token === '') {
 
 $pass = 0;
 $fail = 0;
+$skipped = 0;
 
 function call(string $url, string $token, string $tool, array $args = []): array
 {
@@ -74,6 +75,13 @@ function check(string $label, bool $ok, string $detail = ''): void
     global $pass, $fail;
     $ok ? $pass++ : $fail++;
     printf("  [%s] %-54s %s\n", $ok ? 'PASS' : 'FAIL', $label, $detail);
+}
+
+function skip(string $label, string $why): void
+{
+    global $skipped;
+    $skipped++;
+    printf("  [SKIP] %-54s %s\n", $label, $why);
 }
 
 echo "M3 tool surface\n" . str_repeat('=', 80) . "\n";
@@ -562,10 +570,23 @@ check('schema_list returns discovered classes',
     (int) ($schemas['result']['shown'] ?? 0) > 0 || !empty($schemas['result']['extras']),
     $schemas['error']['message'] ?? '');
 
-$described = call($url, $token, 'modxmcp_schema_describe', ['class' => 'MODX\\Revolution\\modResource']);
-check('schema_describe describes a core class',
-    !empty($described['result']['fields']) || !empty($described['result']['access']),
-    $described['error']['message'] ?? '');
+// A class the scanner actually discovered. PackageScanner reads extras'
+// metadata, so MODX core classes are not in the map at all.
+$anyClass = null;
+foreach ($schemas['result']['extras'] ?? [] as $classes) {
+    if (is_array($classes) && $classes !== []) {
+        $anyClass = $classes[0]['class'] ?? null;
+        break;
+    }
+}
+if ($anyClass === null) {
+    skip('schema_describe describes a discovered class', 'this site has no extra models');
+} else {
+    $described = call($url, $token, 'modxmcp_schema_describe', ['class' => $anyClass]);
+    check('schema_describe describes a discovered class',
+        !empty($described['result']['fields']) || !empty($described['result']['access']),
+        $anyClass);
+}
 
 $blocked = call($url, $token, 'modxmcp_schema_describe', ['class' => 'MODX\\Revolution\\modUser']);
 check('schema_describe refuses a hard-blocked class',
@@ -578,9 +599,10 @@ $injection = call($url, $token, 'modxmcp_object_list', [
     'class'   => 'MODX\\Revolution\\modCategory',
     'filters' => ['id:) OR 1=1 -- ' => 1],
 ]);
-check('object_list rejects an operator outside the allowlist',
+check('object_list refuses an injection-shaped filter key',
     !empty($injection['isError']) || $injection['error'] !== null,
-    'this exact key was a working SQL injection before beta2');
+    'refused here by the class allowlist; the operator check itself is proven '
+    . 'by dev/object-filter-probe.php, which reaches it');
 
 $badField = call($url, $token, 'modxmcp_object_list', [
     'class'   => 'MODX\\Revolution\\modCategory',
@@ -708,5 +730,5 @@ foreach ($strayBad['result']['resources'] ?? [] as $row) {
     echo "  swept stray resource {$row['id']} (a rejected class_key should not have created one)\n";
 }
 
-echo str_repeat('=', 80) . "\n{$pass} passed, {$fail} failed\n";
+echo str_repeat('=', 80) . "\n{$pass} passed, {$fail} failed, {$skipped} skipped\n";
 exit($fail === 0 ? 0 : 1);
