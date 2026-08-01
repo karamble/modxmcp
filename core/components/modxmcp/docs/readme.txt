@@ -16,8 +16,15 @@ fire the Manager's save path, so SeoSuite never registers it and the page
 is absent from sitemap.xml; Collections never applies its rules and the
 page vanishes from listings; caches are not invalidated.
 
-Every write in modxmcp goes through a MODX processor instead, which is the
-same code path the Manager uses. Extras see the change and react to it.
+Every content write in modxmcp goes through a MODX processor instead, which
+is the same code path the Manager uses. Extras see the change and react to
+it.
+
+Two paths deliberately do not, because MODX ships no processor for them:
+generic object access (modxmcp_object_save, modxmcp_object_delete) and
+SeoSuite redirects. Each says so in its own response rather than leaving you
+to find out, and generic object access is off until an administrator
+allowlists a class.
 
 
 AFTER INSTALLING
@@ -63,10 +70,18 @@ different URL; do not change its content, template or cacheable flag.
 PROTOCOL
 --------
 
-Implements MCP revision 2026-07-28 (Streamable HTTP) only. That revision is
-stateless: no initialize handshake, no sessions, no SSE. Clients speaking
-an earlier revision are rejected with a message naming the version this
-server supports.
+Streamable HTTP, no SSE, and no sessions in either era: the token identifies
+every request.
+
+Two revisions are served from the same endpoint, chosen per request rather
+than per connection. A request carrying per-request _meta is served under
+2026-07-28; anything else is treated as an initialization-based client and
+served under 2025-11-25 semantics, which also covers 2025-06-18 and
+2025-03-26.
+
+Both are supported deliberately. Every shipping MCP client still opens with
+an initialize handshake, so a modern-only server would have nothing able to
+connect to it.
 
 
 GENERIC OBJECT ACCESS

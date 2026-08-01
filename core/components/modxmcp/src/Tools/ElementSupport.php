@@ -27,7 +27,14 @@ use MODXMCP\Protocol\McpException;
 trait ElementSupport
 {
     /**
-     * @return array<string,array{class:string,processor:string,name:string,content:string,label:string}>
+     * `fields` maps our argument name to the property the processor expects. They
+     * are not the same, and often not the same as the column either: `elements`
+     * is submitted as `els`, an element's default property set is `propdata`, and
+     * a TV's input and output option blobs are not submitted as objects at all
+     * (see explodePrefixed()). Centralising the mapping here is what keeps
+     * ElementSaveTool a loop rather than a run of special cases.
+     *
+     * @return array<string,array<string,mixed>>
      */
     private function elementTypes(): array
     {
@@ -38,6 +45,7 @@ trait ElementSupport
                 'name'      => 'name',
                 'content'   => 'snippet',
                 'label'     => 'chunk (a reusable HTML fragment)',
+                'fields'    => ['locked' => 'locked'],
             ],
             'snippet' => [
                 'class'     => modSnippet::class,
@@ -45,6 +53,8 @@ trait ElementSupport
                 'name'      => 'name',
                 'content'   => 'snippet',
                 'label'     => 'snippet (PHP executed on render)',
+                'fields'    => ['locked' => 'locked'],
+                'properties' => true,
             ],
             'template' => [
                 'class'     => modTemplate::class,
@@ -52,6 +62,8 @@ trait ElementSupport
                 'name'      => 'templatename',
                 'content'   => 'content',
                 'label'     => 'template (the page shell)',
+                'fields'    => ['locked' => 'locked', 'icon' => 'icon'],
+                'properties' => true,
             ],
             'tv' => [
                 'class'     => modTemplateVar::class,
@@ -59,6 +71,14 @@ trait ElementSupport
                 'name'      => 'name',
                 'content'   => 'default_text',
                 'label'     => 'template variable (a custom field on resources)',
+                'fields'    => [
+                    'locked'         => 'locked',
+                    'input_type'     => 'type',
+                    'caption'        => 'caption',
+                    'elements'       => 'els',
+                    'display'        => 'display',
+                    'rank'            => 'rank',
+                ],
             ],
             'plugin' => [
                 'class'     => modPlugin::class,
@@ -66,6 +86,11 @@ trait ElementSupport
                 'name'      => 'name',
                 'content'   => 'plugincode',
                 'label'     => 'plugin (PHP bound to system events)',
+                'fields'    => [
+                    'locked'   => 'locked',
+                    'disabled' => 'disabled',
+                ],
+                'properties' => true,
             ],
         ];
     }
@@ -156,6 +181,126 @@ trait ElementSupport
     }
 
     /**
+     * Fold a type's own definition fields into the processor properties.
+     *
+     * @param array<string,mixed> $arguments
+     * @param array<string,mixed> $properties
+     * @param array<string,mixed> $type
+     * @throws McpException
+     */
+    protected function applyElementFields(array $arguments, array &$properties, array $type): void
+    {
+        foreach ($type['fields'] ?? [] as $argument => $property) {
+            if (!array_key_exists($argument, $arguments) || $arguments[$argument] === null) {
+                continue;
+            }
+            $value = $arguments[$argument];
+
+            if (in_array($property, ['locked', 'disabled'], true)) {
+                $properties[$property] = !empty($value) ? 1 : 0;
+                continue;
+            }
+
+            if ($property === 'rank') {
+                $properties['rank'] = (int) $value;
+                continue;
+            }
+
+            $properties[$property] = is_array($value) ? $value : (string) $value;
+        }
+
+        // The two option blobs are the odd ones out: the processor does not read
+        // them as objects. It scans every submitted property for a prefix and
+        // rebuilds the column from what it finds, so a map has to be flattened
+        // into one prefixed property per entry before the call.
+        //
+        // Safe to omit. Element/TemplateVar/Update only writes the column when at
+        // least one prefixed key was present, so a save that does not mention
+        // them leaves an existing MIGX configuration alone.
+        $this->explodePrefixed($arguments, $properties, 'input_properties', 'inopt_');
+        $this->explodePrefixed($arguments, $properties, 'output_properties', 'prop_');
+    }
+
+    /**
+     * Write an element's default property set.
+     *
+     * Not part of applyElementFields(), because it cannot ride on the element
+     * save at all. `propdata` is read by Element/Create and by nothing else:
+     * every Update processor documents it in its docblock and then never looks
+     * at it, so sending it on an update is a silent no-op. The Manager works
+     * around this by posting the properties grid separately to
+     * Element/PropertySet/UpdateFromElement, and so does this.
+     *
+     * Called after the save because it needs the element's id, and it is the one
+     * part of a save that cannot be validated beforehand.
+     *
+     * @param array<string,mixed> $properties raw property definitions from the caller
+     * @throws McpException
+     */
+    protected function applyElementProperties(
+        modX $modx,
+        string $typeKey,
+        int $elementId,
+        array $properties
+    ): void {
+        $response = $modx->runProcessor('Element/PropertySet/UpdateFromElement', [
+            'id'          => 'Default',
+            'elementId'   => $elementId,
+            'elementType' => $this->propertySetElementType($typeKey),
+            'data'        => json_encode(
+                array_values($properties),
+                JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+            ),
+        ]);
+
+        if (!$response || $response->isError()) {
+            throw McpException::internal(sprintf(
+                'The element saved but its default properties did not: %s',
+                $response ? $response->getMessage() : 'the processor could not be loaded'
+            ));
+        }
+    }
+
+    /**
+     * The class name Element/PropertySet/UpdateFromElement expects.
+     */
+    private function propertySetElementType(string $typeKey): string
+    {
+        $type = $this->elementType($typeKey);
+
+        return $type['class'];
+    }
+
+    /**
+     * @param array<string,mixed> $arguments
+     * @param array<string,mixed> $properties
+     * @throws McpException
+     */
+    private function explodePrefixed(
+        array $arguments,
+        array &$properties,
+        string $argument,
+        string $prefix
+    ): void {
+        if (!array_key_exists($argument, $arguments) || $arguments[$argument] === null) {
+            return;
+        }
+        if (!is_array($arguments[$argument])) {
+            throw McpException::invalidParams("{$argument} must be an object of option names to values.");
+        }
+
+        foreach ($arguments[$argument] as $key => $value) {
+            $key = trim((string) $key);
+            if ($key === '') {
+                continue;
+            }
+            $properties[$prefix . $key] = is_array($value)
+                ? json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                : $value;
+        }
+    }
+
+    /**
      * Refuse arguments that mean nothing for the type being saved.
      *
      * Two element types carry a binding that lives in its own table, and each
@@ -180,10 +325,14 @@ trait ElementSupport
             if (in_array($typeKey, $validFor, true)) {
                 continue;
             }
+            $plural = array_map(static fn($t) => $t . 's', $validFor);
+            $last   = array_pop($plural);
+            $names  = $plural === [] ? $last : implode(', ', $plural) . ' and ' . $last;
+
             throw McpException::invalidParams(sprintf(
                 "'%s' applies to %s, not to %s. Nothing was written.",
                 $property,
-                implode(' and ', array_map(fn($t) => $t . 's', $validFor)),
+                $names,
                 $typeKey . 's'
             ));
         }

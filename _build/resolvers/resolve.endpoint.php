@@ -30,15 +30,22 @@ if (!in_array($action, [xPDOTransport::ACTION_INSTALL, xPDOTransport::ACTION_UPG
     return true;
 }
 
-// --- the extension point third-party extras bind to -------------------------
+// --- the extension points third-party extras bind to ------------------------
+//
+// Both need a modEvent row or a plugin cannot be bound to them at all, however
+// correct the plugin is. OnMCPCollectAdvisories shipped in the code and the
+// changelog before it was registered here, which left installs with the code
+// path and no event name to hang it on.
 
-$event = $modx->getObject(modEvent::class, ['name' => 'OnMCPRegisterTools']) ?: $modx->newObject(modEvent::class);
-$event->fromArray([
-    'name'      => 'OnMCPRegisterTools',
-    'service'   => 6,
-    'groupname' => 'modxmcp',
-], '', true, true);
-$event->save();
+foreach (['OnMCPRegisterTools', 'OnMCPCollectAdvisories'] as $eventName) {
+    $event = $modx->getObject(modEvent::class, ['name' => $eventName]) ?: $modx->newObject(modEvent::class);
+    $event->fromArray([
+        'name'      => $eventName,
+        'service'   => 6,
+        'groupname' => 'modxmcp',
+    ], '', true, true);
+    $event->save();
+}
 
 // --- the endpoint -----------------------------------------------------------
 

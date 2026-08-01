@@ -57,6 +57,43 @@ final class ElementSaveTool extends AbstractTool
                     . 'one. Passing a list replaces the current bindings: events you omit are '
                     . 'unbound. Omit the argument entirely to leave existing bindings alone.',
                     ['type' => 'string']),
+                'input_type'  => Schema::string(
+                    'TEMPLATE VARIABLES ONLY. What kind of field this is: text, textarea, '
+                    . 'richtext, image, file, listbox, listbox-multiple, checkbox, option, date, '
+                    . 'number, email, url, tag, autotag, resourcelist, hidden, or a type an extra '
+                    . 'provides such as migx. Note the radio type is called "option"; "radio" is '
+                    . 'not a type and a TV given it silently renders as plain text.'),
+                'caption'     => Schema::string(
+                    'TEMPLATE VARIABLES ONLY. The label shown on the resource edit form. MODX '
+                    . 'falls back to the TV name when creating without one.'),
+                'elements'    => Schema::string(
+                    'TEMPLATE VARIABLES ONLY. The option list for listbox, checkbox and option '
+                    . 'types. Options are separated by || and an option may be written '
+                    . 'label==value, e.g. "Red==r||Green==g". A @SELECT or @EVAL binding works '
+                    . 'here too.'),
+                'input_properties' => Schema::map(
+                    'TEMPLATE VARIABLES ONLY. Configuration for the chosen input type, e.g. '
+                    . '{"configs": "myMigxConfig"} for a MIGX TV. Passing this REPLACES the '
+                    . 'whole set rather than merging, so send every option you want to keep. '
+                    . 'Omit it entirely to leave the existing configuration alone.'),
+                'output_properties' => Schema::map(
+                    'TEMPLATE VARIABLES ONLY. Configuration for the output renderer named by '
+                    . 'display. Same replace-not-merge behaviour as input_properties.'),
+                'display'     => Schema::string(
+                    'TEMPLATE VARIABLES ONLY. Output renderer: date, delim, htmltag, image, '
+                    . 'richtext, string, text, url, or default.'),
+                'rank'        => Schema::integer(
+                    'TEMPLATE VARIABLES ONLY. Sort position on the resource edit form.'),
+                'properties'  => Schema::arrayOf(
+                    'SNIPPETS, PLUGINS AND TEMPLATES ONLY. Default properties, as a list of '
+                    . '{"name": ..., "value": ..., "type": "textfield", "desc": ""} objects. '
+                    . 'Always give a string value; a null value is silently mangled by MODX. '
+                    . 'Passing this replaces the whole set.',
+                    ['type' => 'object']),
+                'disabled'    => Schema::boolean(
+                    'PLUGINS ONLY. A disabled plugin stays bound to its events but does not run.'),
+                'locked'      => Schema::boolean(
+                    'Restrict editing to administrators.'),
                 'templates'   => Schema::arrayOf(
                     'TEMPLATE VARIABLES ONLY. Templates this TV is attached to, as ids or '
                     . 'template names. A TV attached to no template renders on no resource, and '
@@ -74,8 +111,17 @@ final class ElementSaveTool extends AbstractTool
         $type    = $this->elementType($typeKey);
 
         $this->rejectMisplaced($arguments, $typeKey, [
-            'events'    => ['plugin'],
-            'templates' => ['tv'],
+            'events'            => ['plugin'],
+            'templates'         => ['tv'],
+            'input_type'        => ['tv'],
+            'caption'           => ['tv'],
+            'elements'          => ['tv'],
+            'input_properties'  => ['tv'],
+            'output_properties' => ['tv'],
+            'display'           => ['tv'],
+            'rank'              => ['tv'],
+            'disabled'          => ['plugin'],
+            'properties'        => ['snippet', 'plugin', 'template'],
         ]);
 
         $id   = $this->arg($arguments, 'id');
@@ -118,6 +164,9 @@ final class ElementSaveTool extends AbstractTool
         if (array_key_exists('category', $arguments) && $arguments['category'] !== null) {
             $properties['category'] = $this->resolveCategoryId($modx, $arguments['category']);
         }
+
+        // Definition fields, mapped per type in ElementSupport::elementTypes().
+        $this->applyElementFields($arguments, $properties, $type);
 
         // Bindings live in their own tables, and both Create and Update accept
         // them as a property, so they ride along on the same processor call and
@@ -167,6 +216,14 @@ final class ElementSaveTool extends AbstractTool
                 . 'cannot be confirmed. Read the element back with modxmcp_element_get.',
                 $action
             ));
+        }
+
+        // Default properties cannot ride on the save: propdata is read by the
+        // Create processors and ignored by every Update processor, so this goes
+        // through the same separate processor the Manager uses.
+        $elementProperties = $this->arg($arguments, 'properties');
+        if (is_array($elementProperties)) {
+            $this->applyElementProperties($modx, $typeKey, $savedId, $elementProperties);
         }
 
         $saved             = $this->summariseElement($modx, $type, $savedId, false);
