@@ -33,6 +33,11 @@ final class ResourceGetTool extends AbstractTool
                 'alias'       => Schema::string('Resource alias, if you do not have the id.'),
                 'context'     => Schema::string('Context to look in when using alias.', 'web'),
                 'include_tvs' => Schema::boolean('Include template variable values.', true),
+                'include_tv_state' => Schema::boolean(
+                    'For each template variable, also report whether its value is stored on this '
+                    . 'resource or inherited from the TV default. The plain tvs map cannot show '
+                    . 'the difference: a TV deliberately blanked reads the same as one nobody '
+                    . 'has set. Costs one extra query per TV, so it is off by default.', false),
                 'include_content' => Schema::boolean('Include the content field, which can be large.', true),
             ]),
         ];
@@ -52,6 +57,13 @@ final class ResourceGetTool extends AbstractTool
 
         if ($this->arg($arguments, 'include_tvs', true)) {
             $row['tvs'] = $this->readTvs($modx, $resource);
+
+            // A sibling key rather than a richer tvs map: resource_update and
+            // resource_duplicate round-trip tvs straight back through
+            // resolveTvs(), which expects name => scalar.
+            if (!empty($arguments['include_tv_state'])) {
+                $row['tv_state'] = $this->readTvStateFor($modx, $resource);
+            }
         }
 
         // Surfaced on a read so an operator can audit a site for resources older

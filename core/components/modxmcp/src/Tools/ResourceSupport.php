@@ -60,6 +60,20 @@ trait ResourceSupport
     }
 
     /**
+     * Per-TV storage state for a resource, keyed by name.
+     *
+     * @return array<string,array<string,mixed>>
+     */
+    protected function readTvStateFor(modX $modx, modResource $resource): array
+    {
+        return $this->readTvState(
+            $modx,
+            (int) $resource->get('id'),
+            (int) $resource->get('template')
+        );
+    }
+
+    /**
      * Warnings a caller cannot derive from any schema.
      *
      * Collections stores its rule in a plugin, not in the resource table: a

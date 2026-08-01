@@ -293,6 +293,36 @@ trait TemplateVarSupport
     }
 
     /**
+     * Whether each of a template's TVs is stored on this resource or inherited.
+     *
+     * getValue() cannot answer this. It falls back to default_text only on a
+     * strict null, so a row containing an empty string reads as '' while no row
+     * at all reads as the default -- and both look identical to a caller holding
+     * only the value. A TV deliberately blanked over a non-empty default is
+     * indistinguishable from one nobody has touched.
+     *
+     * Costs one count per attached TV, which is why it is opt-in. attachedTvs()
+     * is the only reader that still holds the modTemplateVar objects, and
+     * therefore the ids this needs; everything else has reduced them to names.
+     *
+     * @return array<string,array<string,mixed>>
+     */
+    protected function readTvState(modX $modx, int $resourceId, int $templateId): array
+    {
+        $state = [];
+        foreach ($this->attachedTvs($modx, $templateId) as $name => $tv) {
+            $stored = $this->tvRowExists($modx, $resourceId, (int) $tv->get('id'));
+            $state[$name] = [
+                'state'   => $stored ? 'stored' : 'default',
+                'value'   => $tv->getValue($resourceId),
+                'default' => $tv->get('default_text'),
+            ];
+        }
+
+        return $state;
+    }
+
+    /**
      * Unused rows are not an error worth reporting, so this stays quiet.
      *
      * Kept so callers that only need to know whether a value is stored at all
