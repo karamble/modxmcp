@@ -2,6 +2,8 @@
 
 namespace MODXMCP\Tools;
 
+use MODX\Revolution\modPluginEvent;
+use MODX\Revolution\modTemplateVarTemplate;
 use MODX\Revolution\modX;
 use MODXMCP\Registry\Schema;
 
@@ -111,13 +113,68 @@ final class ElementSaveTool extends AbstractTool
         $result['type']    = $typeKey;
         $result['created'] = $created;
 
+        $warnings = [];
+
         if (!empty($object['static'])) {
-            $result['warnings'] = [
-                'This element is static: MODX reads its body from disk, so this database change '
-                . 'will not take effect until the file is updated.',
-            ];
+            $warnings[] = 'This element is static: MODX reads its body from disk, so this '
+                . 'database change will not take effect until the file is updated.';
+        }
+
+        $warnings = array_merge($warnings, $this->bindingWarnings($modx, $typeKey, $object));
+
+        if ($warnings !== []) {
+            $result['warnings'] = $warnings;
         }
 
         return $result;
+    }
+
+    /**
+     * Warn when an element saved successfully but cannot possibly run.
+     *
+     * Two element types are inert without a binding that lives in a separate
+     * table, and this tool does not write either one yet. A plugin with no rows
+     * in modPluginEvent is never invoked by anything; a template variable with
+     * no rows in modTemplateVarTemplate is attached to no template, so it
+     * renders nowhere and the Resource processors will discard any value written
+     * to it. In both cases the save genuinely succeeded, which is exactly what
+     * makes the silence dangerous: the caller has every reason to believe the
+     * job is done.
+     *
+     * Checked rather than assumed, because a caller may well be updating an
+     * element that was bound in the Manager years ago.
+     *
+     * @param array<string,mixed> $object
+     * @return string[]
+     */
+    private function bindingWarnings(modX $modx, string $typeKey, array $object): array
+    {
+        $id = (int) ($object['id'] ?? 0);
+        if ($id <= 0) {
+            return [];
+        }
+
+        if ($typeKey === 'plugin') {
+            if ($modx->getCount(modPluginEvent::class, ['pluginid' => $id]) > 0) {
+                return [];
+            }
+            return ['This plugin is bound to no system events, so MODX will never execute it. '
+                . 'Event bindings live in a separate table that this tool does not write yet: '
+                . 'attach it to its events in the Manager under Elements > Plugins > '
+                . 'System Events.'];
+        }
+
+        if ($typeKey === 'tv') {
+            if ($modx->getCount(modTemplateVarTemplate::class, ['tmplvarid' => $id]) > 0) {
+                return [];
+            }
+            return ['This template variable is attached to no template, so it renders on no '
+                . 'resource, and modxmcp_resource_create and modxmcp_resource_update cannot '
+                . 'write a value to it: the MODX Resource processors only write TVs that the '
+                . 'resource\'s template declares. Attach it to a template in the Manager under '
+                . 'Elements > Template Variables > Template Access.'];
+        }
+
+        return [];
     }
 }

@@ -65,7 +65,22 @@ final class ResourceUpdateTool extends AbstractTool
                 'hidemenu'    => Schema::boolean('Hide from menus.'),
                 'menuindex'   => Schema::integer('Sort position among siblings.'),
                 'show_in_tree' => Schema::boolean('Show in the resource tree.'),
-                'tvs'         => Schema::map('Template variable values keyed by TV name. Only the TVs you pass are changed.'),
+                'class_key'   => Schema::string(
+                    'Change the resource type. Same values as modxmcp_resource_create. No '
+                    . 'type-specific data is migrated: the content field means something '
+                    . 'different for a weblink or a static resource, and switching to or from '
+                    . 'an extra\'s container type does not create or remove that extra\'s own '
+                    . 'configuration. Also use this to repair a resource whose class_key is '
+                    . 'MODX\\Revolution\\modResource, which is not a type MODX itself ever '
+                    . 'creates.'),
+                'tvs'         => Schema::map(
+                    'Template variable values keyed by TV name. Only the TVs you pass are '
+                    . 'changed. Only TVs attached to the resource\'s template can be written; '
+                    . 'passing one that is not attached is rejected and nothing is updated, '
+                    . 'because MODX would otherwise accept the call and silently discard the '
+                    . 'value. If you change template in the same call, TVs are resolved against '
+                    . 'the new template. The values actually stored come back in the tvs field '
+                    . 'of the result.'),
             ], ['id']),
         ];
     }
@@ -80,8 +95,10 @@ final class ResourceUpdateTool extends AbstractTool
             throw McpException::invalidParams("No resource with id {$id}");
         }
 
-        $originalAlias = (string) $resource->get('alias');
-        $originalUri   = (string) $resource->get('uri');
+        $originalAlias    = (string) $resource->get('alias');
+        $originalUri      = (string) $resource->get('uri');
+        $originalClassKey = (string) $resource->get('class_key');
+        $originalTemplate = (int) $resource->get('template');
 
         // Start from the stored row so omitted fields survive the save.
         $properties = $resource->toArray();
@@ -100,14 +117,35 @@ final class ResourceUpdateTool extends AbstractTool
             $properties[$field] = $value;
         }
 
+        // Deliberately outside the EDITABLE loop. That loop applies generic casts
+        // and merges blindly, and class_key needs validating against the resource
+        // types this site actually has. Set unconditionally rather than relying on
+        // toArray() to carry it: Resource/Update dereferences
+        // $properties['class_key'] with no isset guard, so it must always be
+        // present, changed or not.
+        $properties['class_key'] = $this->resolveClassKey(
+            $modx,
+            $this->arg($arguments, 'class_key'),
+            $originalClassKey
+        );
+
+        // Resolve TVs against the template the resource will HAVE, not the one it
+        // had. The old code read them off the in-memory object after the template
+        // had already been overwritten in $properties, so a call changing template
+        // and TVs together resubmitted the previous template's TV set: values MODX
+        // then discarded, against a template that never declared them.
+        $targetTemplate = (int) ($properties['template'] ?? 0);
+
         // Existing TV values must be resubmitted too, or the save blanks them.
-        $currentTvs = $this->readTvs($modx, $resource);
+        // These are attached to $targetTemplate by construction, so only
+        // caller-supplied names can ever trigger a rejection below.
+        $currentTvs = $this->readTvsForTemplate($modx, $id, $targetTemplate);
         $incoming   = $this->arg($arguments, 'tvs');
-        if (is_array($incoming)) {
-            $currentTvs = array_merge($currentTvs, $incoming);
-        }
-        if ($currentTvs !== []) {
-            $properties += $this->tvProperties($modx, $currentTvs);
+        $incoming   = is_array($incoming) ? $incoming : [];
+        $merged     = array_merge($currentTvs, $incoming);
+
+        if ($merged !== []) {
+            $properties = array_replace($properties, $this->resolveTvs($modx, $merged, $targetTemplate));
         }
 
         $this->runProcessor($modx, 'Resource/Update', $properties);
@@ -139,7 +177,27 @@ final class ResourceUpdateTool extends AbstractTool
             );
         }
 
+        $newClassKey = (string) ($result['class_key'] ?? $originalClassKey);
+        $warnings    = array_merge(
+            $warnings,
+            $this->classKeyWarnings($modx, $newClassKey, $newClassKey !== $originalClassKey),
+            // Only when the caller left it alone: if they just changed it, the
+            // classKeyWarnings above already say everything worth saying.
+            $newClassKey === $originalClassKey
+                ? $this->legacyClassKeyWarning($originalClassKey)
+                : []
+        );
+
+        $warnings = array_merge(
+            $warnings,
+            $this->templateChangeWarnings($modx, $originalTemplate, $targetTemplate)
+        );
+
         $result['warnings'] = $warnings;
+
+        if ($incoming !== []) {
+            $result['tvs'] = $this->readTvValues($modx, $id, array_keys($incoming));
+        }
 
         return $result;
     }

@@ -148,6 +148,108 @@ check('alias change warns about the missing redirect',
 $listed = call($url, $token, 'modxmcp_resource_list', ['search' => 'modxmcp tool test']);
 check('resource_list finds it', (int) ($listed['result']['total'] ?? 0) >= 1);
 
+// --- resource type (class_key) -----------------------------------------------
+//
+// The regression this section exists for: every create before 0.4.0 forced
+// class_key to the abstract modResource, so resources made through this server
+// did not match anything the Manager produces and extras that key on class_key
+// did not recognise them.
+const DOC_CLASS = 'MODX\\Revolution\\modDocument';
+
+check('create defaults to modDocument, not the abstract base',
+    ($created['result']['class_key'] ?? '') === DOC_CLASS,
+    'got ' . ($created['result']['class_key'] ?? 'nothing'));
+
+$shortName = call($url, $token, 'modxmcp_resource_create', [
+    'pagetitle' => 'modxmcp tool test shortname',
+    'alias'     => $alias . '-short',
+    'class_key' => 'modDocument',
+]);
+$shortId = (int) ($shortName['result']['id'] ?? 0);
+check('class_key accepts the short spelling',
+    ($shortName['result']['class_key'] ?? '') === DOC_CLASS);
+
+$weblink = call($url, $token, 'modxmcp_resource_create', [
+    'pagetitle' => 'modxmcp tool test weblink',
+    'alias'     => $alias . '-link',
+    'class_key' => 'MODX\\Revolution\\modWebLink',
+    'content'   => 'https://example.com/',
+]);
+$weblinkId = (int) ($weblink['result']['id'] ?? 0);
+check('class_key accepts a derived core type',
+    ($weblink['result']['class_key'] ?? '') === 'MODX\\Revolution\\modWebLink');
+check('weblink create warns that content is the target',
+    (bool) array_filter($weblink['result']['warnings'] ?? [],
+        fn($w) => stripos($w, 'target') !== false));
+
+$badClass = call($url, $token, 'modxmcp_resource_create', [
+    'pagetitle' => 'modxmcp tool test bad class',
+    'alias'     => $alias . '-bad',
+    'class_key' => 'MODX\\Revolution\\notAClass',
+]);
+check('an unknown class_key is rejected', !empty($badClass['isError']) || $badClass['error'] !== null);
+$badSwept = call($url, $token, 'modxmcp_resource_list', ['search' => $alias . '-bad']);
+check('a rejected class_key creates nothing',
+    (int) ($badSwept['result']['total'] ?? 0) === 0);
+
+if ($weblinkId > 0) {
+    $retyped = call($url, $token, 'modxmcp_resource_update', [
+        'id'        => $weblinkId,
+        'class_key' => DOC_CLASS,
+    ]);
+    check('resource_update changes class_key',
+        ($retyped['result']['class_key'] ?? '') === DOC_CLASS,
+        'this is the repair path for resources created by earlier versions');
+    check('a class_key change warns that nothing is migrated',
+        (bool) array_filter($retyped['result']['warnings'] ?? [],
+            fn($w) => stripos($w, 'migrated') !== false));
+
+    $confirmed = call($url, $token, 'modxmcp_resource_get', ['id' => $weblinkId]);
+    check('the re-typed resource reads back as modDocument',
+        ($confirmed['result']['class_key'] ?? '') === DOC_CLASS);
+}
+
+// --- template variables ------------------------------------------------------
+//
+// A TV that exists but is not attached to the resource's template used to be
+// accepted, encoded as tv{id} and then discarded inside the processor's
+// template-joined loop, so the call reported success and wrote nothing.
+$strayTv = 'modxmcpToolTestTv';
+$tvSaved = call($url, $token, 'modxmcp_element_save', [
+    'type'    => 'tv',
+    'name'    => $strayTv,
+    'caption' => 'modxmcp tool test',
+]);
+check('element_save creates a TV', $tvSaved['status'] === 200 && empty($tvSaved['isError']),
+    $tvSaved['error']['message'] ?? '');
+check('a TV with no template assignment warns that it renders nowhere',
+    (bool) array_filter($tvSaved['result']['warnings'] ?? [],
+        fn($w) => stripos($w, 'attached to no template') !== false));
+
+$unknownTv = call($url, $token, 'modxmcp_resource_update', [
+    'id'  => $newId,
+    'tvs' => ['modxmcpNoSuchTvAnywhere' => 'x'],
+]);
+check('an unknown TV name is rejected',
+    !empty($unknownTv['isError']) || $unknownTv['error'] !== null);
+
+// A newly created TV is attached to no template, which makes this deterministic
+// without assuming anything about the site's own template/TV wiring.
+$unattached = call($url, $token, 'modxmcp_resource_update', [
+    'id'        => $newId,
+    'pagetitle' => 'SHOULD NOT LAND',
+    'tvs'       => [$strayTv => 'x'],
+]);
+check('an unattached TV is rejected rather than silently dropped',
+    !empty($unattached['isError']) || $unattached['error'] !== null);
+
+// The assertion that proves validation happens before the write: if the TV
+// rejection had come after runProcessor, the pagetitle would have landed.
+$intact = call($url, $token, 'modxmcp_resource_get', ['id' => $newId]);
+check('a rejected TV writes nothing at all',
+    ($intact['result']['pagetitle'] ?? '') !== 'SHOULD NOT LAND',
+    'pagetitle is ' . ($intact['result']['pagetitle'] ?? 'missing'));
+
 // --- elements ----------------------------------------------------------------
 $chunkName = 'modxmcpToolTestChunk';
 

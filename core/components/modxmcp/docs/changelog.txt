@@ -75,3 +75,88 @@ Security fixes found by review before any public release.
   returning what the processor echoes. Resource/Create returns only an id,
   and Resource/Update strips pagetitle, longtitle, content, introtext,
   description and menutitle.
+
+1.0.0-beta5
+===========
+Correctness release. Every fix below is a case where a tool reported success
+while the site did nothing, or did something other than what was asked.
+
+Behaviour changes
+-----------------
+
+- Resources are created as MODX\Revolution\modDocument, not the abstract
+  MODX\Revolution\modResource.
+
+  Resource/Create already defaults to modDocument; modxmcp was overriding it on
+  every single write. The Manager never creates a modResource, and extras that
+  key on class_key (Collections, Articles, type-specific rendering) do not
+  recognise one.
+
+  Resources created by earlier versions keep the wrong type. They are not
+  rewritten automatically, because that would be a write you did not ask for on
+  a value some sites may have set deliberately. resource_get and
+  resource_update now flag them, and resource_update can repair them:
+
+      modxmcp_resource_update {"id": 42, "class_key": "MODX\Revolution\modDocument"}
+
+- Writing a template variable that is not attached to the resource's template
+  is now an error. It previously returned success and wrote nothing.
+
+  The Resource processors only iterate TVs that the resource's template
+  declares, so a tv{id} property for anything else was accepted, submitted and
+  discarded inside the loop. Validation now runs before the processor, so a
+  rejection leaves nothing half-written, and the error names what the template
+  does declare. Callers whose TV writes were silently doing nothing will start
+  seeing failures; those writes were never landing.
+
+Fixes
+-----
+
+- Generic writes to resource and element SUBCLASSES were not blocked.
+
+  ClassGuard matched class names with anchored patterns and no ancestry check,
+  so MODX\Revolution\modResource was blocked while MODX\Revolution\modDocument,
+  modWebLink, modSymLink, modStaticResource and every extra-provided container
+  class were not. Since modDocument is what nearly every real page is, a site
+  with modxmcp.write_class_allowlist set to * was exposed to generic
+  xPDO::save() writes against its content, bypassing the processors this extra
+  exists to route through. The guard now tests ancestry.
+
+- Changing template and template variables in one resource_update call resolved
+  the TVs against the OLD template, resubmitting values MODX then discarded.
+  They are now resolved against the template the resource will have, and the
+  response warns which TVs fell out of, and came into, effect.
+
+- MIGX values are still JSON-encoded, but tag and autotag TVs are now
+  comma-joined rather than JSON-encoded. The processor calls explode(',') on
+  them unconditionally, so an array was a TypeError and JSON was the wrong
+  content.
+
+Additions
+---------
+
+- class_key on resource_create and resource_update. Accepts short names
+  (modWebLink) as well as fully-qualified ones, and validates against the
+  resource types the site actually has, so Collections containers, weblinks,
+  symlinks and static resources can now be created. An unresolvable value is
+  refused rather than written, because MODX instantiates resources by class_key
+  and a bad one produces a row only SQL can remove.
+
+- resource_create and resource_update return a tvs field echoing the values
+  actually stored, for the names you passed. Absent when you passed no TVs, so
+  responses are otherwise unchanged.
+
+- element_save warns when a plugin is saved with no event bindings (it will
+  never execute) or a template variable with no template assignment (it renders
+  nowhere and no resource tool can write a value to it). Writing those bindings
+  through the tool surface is not yet supported; the warning names where to set
+  them in the Manager.
+
+Internal
+--------
+
+- ResourceSupport::tvProperties() removed. Resolution lives in the new
+  TemplateVarSupport trait, which resolves against the attached set. Removed
+  rather than deprecated: a wrapper that skipped the attachment check would
+  have kept the silent-drop path alive. Only reachable by a third-party tool
+  that used the trait directly.

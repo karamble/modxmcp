@@ -2,7 +2,6 @@
 
 namespace MODXMCP\Tools;
 
-use MODX\Revolution\modResource;
 use MODX\Revolution\modX;
 use MODXMCP\Registry\Schema;
 
@@ -42,6 +41,16 @@ final class ResourceCreateTool extends AbstractTool
                 'pagetitle'   => Schema::string('Page title. Required.'),
                 'parent'      => Schema::integer('Parent resource id. 0 for top level.', 0),
                 'template'    => Schema::integer('Template id. Omit to use the site default.'),
+                'class_key'   => Schema::string(
+                    'Resource type, as a class name. Defaults to MODX\\Revolution\\modDocument, '
+                    . 'which is what the Manager creates and what almost every page should be. '
+                    . 'Use MODX\\Revolution\\modWebLink to link to another URL, '
+                    . 'MODX\\Revolution\\modSymLink to mirror another resource, '
+                    . 'MODX\\Revolution\\modStaticResource to serve a file from disk, or a class '
+                    . 'an installed extra provides, e.g. Collections\\Model\\CollectionContainer '
+                    . 'for a Collections container. For the weblink, symlink and static types the '
+                    . 'target goes in the content field, not page HTML.',
+                    'MODX\\Revolution\\modDocument'),
                 'alias'       => Schema::string('URL alias. Omit to let MODX derive it from the pagetitle.'),
                 'content'     => Schema::string('Body content, usually HTML.'),
                 'longtitle'   => Schema::string('Long title.'),
@@ -52,7 +61,13 @@ final class ResourceCreateTool extends AbstractTool
                 'hidemenu'    => Schema::boolean('Hide from menus.', false),
                 'show_in_tree' => Schema::boolean('Show in the resource tree. Set false for children of a Collections container.', true),
                 'menuindex'   => Schema::integer('Sort position among siblings.', 0),
-                'tvs'         => Schema::map('Template variable values keyed by TV name, e.g. {"articleimage": "..."}. Arrays are JSON-encoded for MIGX-style TVs.'),
+                'tvs'         => Schema::map(
+                    'Template variable values keyed by TV name, e.g. {"articleimage": "assets/x.jpg"}. '
+                    . 'Only TVs attached to the template you are creating with can be written. '
+                    . 'Passing one that is not attached is rejected and nothing is created, '
+                    . 'because MODX would otherwise accept the call and silently discard the '
+                    . 'value. Arrays are encoded for you, including MIGX item lists. The values '
+                    . 'actually stored come back in the tvs field of the result.'),
             ], ['pagetitle']),
         ];
     }
@@ -64,6 +79,9 @@ final class ResourceCreateTool extends AbstractTool
             ? (!empty($arguments['show_in_tree']) ? 1 : 0)
             : null;
 
+        // Resolved before anything else so a bad class_key fails before the write.
+        $classKey = $this->resolveClassKey($modx, $this->arg($arguments, 'class_key'));
+
         $properties = [
             'pagetitle'   => (string) $this->requireArg($arguments, 'pagetitle'),
             'parent'      => $parent,
@@ -71,7 +89,7 @@ final class ResourceCreateTool extends AbstractTool
             'published'   => !empty($arguments['published']) ? 1 : 0,
             'hidemenu'    => !empty($arguments['hidemenu']) ? 1 : 0,
             'menuindex'   => (int) $this->arg($arguments, 'menuindex', 0),
-            'class_key'   => modResource::class,
+            'class_key'   => $classKey,
         ];
 
         foreach (['alias', 'content', 'longtitle', 'description', 'introtext'] as $field) {
@@ -81,25 +99,46 @@ final class ResourceCreateTool extends AbstractTool
             }
         }
 
-        $template = $this->arg($arguments, 'template');
-        $properties['template'] = $template !== null
+        $template   = $this->arg($arguments, 'template');
+        $templateId = $template !== null
             ? (int) $template
             : (int) $modx->getOption('default_template');
+        $properties['template'] = $templateId;
 
         if ($showInTree !== null) {
             $properties['show_in_tree'] = $showInTree;
         }
 
         $tvs = $this->arg($arguments, 'tvs');
-        if (is_array($tvs)) {
-            $properties += $this->tvProperties($modx, $tvs);
+        $tvs = is_array($tvs) ? $tvs : [];
+        if ($tvs !== []) {
+            // Throws before the processor runs, so a bad TV name leaves no
+            // half-created resource behind.
+            //
+            // array_replace rather than +=: the union operator keeps the
+            // left-hand value on a key collision, which is only safe here
+            // because $properties provably has no tv* keys. That is an
+            // invariant nobody will remember in a year.
+            $properties = array_replace($properties, $this->resolveTvs($modx, $tvs, $templateId));
         }
 
         $object = $this->runProcessor($modx, 'Resource/Create', $properties);
 
         // Read the row back: this processor returns only the id.
-        $result = $this->summarise($modx, (int) ($object['id'] ?? 0));
-        $result['warnings'] = $this->parentWarnings($modx, $parent, $showInTree);
+        $newId  = (int) ($object['id'] ?? 0);
+        $result = $this->summarise($modx, $newId);
+        $result['warnings'] = array_merge(
+            $this->parentWarnings($modx, $parent, $showInTree),
+            $this->classKeyWarnings($modx, $classKey, false)
+        );
+
+        // Only the names the caller passed. Echoing the template's whole TV set
+        // would make a one-field write cost whatever the template costs, and a
+        // single MIGX blob runs to tens of kilobytes. Omitted entirely when no
+        // TVs were passed, so existing callers see an unchanged shape.
+        if ($tvs !== []) {
+            $result['tvs'] = $this->readTvValues($modx, $newId, array_keys($tvs));
+        }
 
         return $result;
     }

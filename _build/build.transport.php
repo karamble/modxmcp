@@ -17,7 +17,7 @@ use xPDO\Transport\xPDOTransport;
 
 const PKG_NAME    = 'modxmcp';
 const PKG_VERSION = '1.0.0';
-const PKG_RELEASE = 'beta2';
+const PKG_RELEASE = 'beta5';
 
 $root = dirname(__DIR__) . '/';
 

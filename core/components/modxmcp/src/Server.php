@@ -28,7 +28,7 @@ use MODXMCP\Registry\ToolRegistry;
 final class Server
 {
     public const NAME    = 'modxmcp';
-    public const VERSION = '0.3.0';
+    public const VERSION = '0.4.0';
 
     private modX $modx;
     private HttpTransport $transport;

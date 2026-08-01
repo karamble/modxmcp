@@ -54,6 +54,14 @@ final class ResourceGetTool extends AbstractTool
             $row['tvs'] = $this->readTvs($modx, $resource);
         }
 
+        // Surfaced on a read so an operator can audit a site for resources older
+        // modxmcp versions mistyped, without having to write to each one to find
+        // out. Present only when there is something to say.
+        $legacy = $this->legacyClassKeyWarning((string) $resource->get('class_key'));
+        if ($legacy !== []) {
+            $row['warnings'] = $legacy;
+        }
+
         return $row;
     }
 

@@ -72,6 +72,26 @@ final class ClassGuard
     ];
 
     /**
+     * Base types whose descendants are equally write-blocked.
+     *
+     * The regex list above matches names, and names only describe the classes
+     * somebody thought to write down. Every list here was anchored with $, so
+     * modResource was blocked and modDocument was not, and modDocument is what
+     * essentially every real MODX page is: the guard blocked the one type
+     * content almost never uses and waved through the one it always uses. The
+     * same held for modWebLink, modSymLink, modStaticResource and every
+     * container class an extra defines, e.g. Collections.
+     *
+     * Ancestry is the property that actually matters, because it is what decides
+     * whether a dedicated processor-backed tool exists for the class. Testing it
+     * cannot be outrun by naming a subclass.
+     */
+    private const WRITE_BLOCKED_DESCENDANTS_OF = [
+        \MODX\Revolution\modResource::class,
+        \MODX\Revolution\modElement::class,
+    ];
+
+    /**
      * Field names masked in read output even for permitted classes.
      *
      * An allowlisted class can still carry a secret in one column, and the
@@ -127,6 +147,41 @@ final class ClassGuard
                 return true;
             }
         }
+
+        return $this->descendsFromWriteBlocked($class);
+    }
+
+    /**
+     * Does this class inherit from a type that has a dedicated tool?
+     *
+     * Two lookups because neither alone is sufficient. is_a() with the
+     * string form covers anything the autoloader can reach, which is every core
+     * class. xPDO::getAncestry() goes through loadClass(), which resolves the
+     * classes an extra registers with addPackage and a plain autoloader may not
+     * see. A class this guard cannot resolve at all falls through to the
+     * allowlist, which is opt-in and therefore closed by default.
+     */
+    private function descendsFromWriteBlocked(string $class): bool
+    {
+        foreach (self::WRITE_BLOCKED_DESCENDANTS_OF as $base) {
+            if (is_a($class, $base, true)) {
+                return true;
+            }
+        }
+
+        $ancestry = $this->modx->getAncestry($class);
+        if (!is_array($ancestry)) {
+            return false;
+        }
+
+        foreach ($ancestry as $ancestor) {
+            foreach (self::WRITE_BLOCKED_DESCENDANTS_OF as $base) {
+                if (strcasecmp((string) $ancestor, $base) === 0) {
+                    return true;
+                }
+            }
+        }
+
         return false;
     }
 
@@ -201,7 +256,14 @@ final class ClassGuard
 
         foreach (preg_split('/[\s,]+/', $raw, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $entry) {
             if ($entry === '*') {
-                // Deliberately still subject to the hard block list above.
+                // Still subject to both the hard block list and, for writes, the
+                // write block list and its descendants: this returns "allowlisted",
+                // not "permitted". canRead()/canWrite() apply the blocks after it.
+                //
+                // Spelled out because the earlier wording mentioned only the hard
+                // blocks, which read as though '*' opened up resources and
+                // elements to generic xPDO writes. It never should, and since the
+                // descendant check landed it demonstrably does not.
                 return true;
             }
             // Matching is case-insensitive throughout, for the same reason the
