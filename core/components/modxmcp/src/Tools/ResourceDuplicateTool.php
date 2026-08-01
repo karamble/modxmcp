@@ -128,11 +128,14 @@ final class ResourceDuplicateTool extends AbstractTool
             );
         }
 
-        $result['warnings'] = array_merge($warnings, $this->parentWarnings(
+        $warnings = array_merge($warnings, $this->parentWarnings(
             $modx,
             (int) ($result['parent'] ?? 0),
             null
         ));
+        if ($warnings !== []) {
+            $result['warnings'] = $warnings;
+        }
 
         return $result;
     }

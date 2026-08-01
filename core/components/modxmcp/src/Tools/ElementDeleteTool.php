@@ -81,12 +81,19 @@ final class ElementDeleteTool extends AbstractTool
 
         $this->runProcessor($modx, $type['processor'] . '/Remove', ['id' => (int) $element->get('id')]);
 
-        return [
+        $out = [
             'type'        => $typeKey,
             'deleted'     => true,
             'recoverable' => false,
             'removed'     => $removed,
-            'warnings'    => $warnings,
         ];
+
+        // Present only when there is something to say. The family was split on
+        // this: element_save already guarded, element_delete did not.
+        if ($warnings !== []) {
+            $out['warnings'] = $warnings;
+        }
+
+        return $out;
     }
 }

@@ -220,7 +220,9 @@ final class ResourceUpdateTool extends AbstractTool
             $this->publishStateWarnings($modx, $arguments, $properties, $result)
         );
 
-        $result['warnings'] = $warnings;
+        if ($warnings !== []) {
+            $result['warnings'] = $warnings;
+        }
 
         if ($incoming !== []) {
             $result['tvs'] = $this->readTvValues($modx, $id, array_keys($incoming));

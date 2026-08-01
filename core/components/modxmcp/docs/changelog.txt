@@ -343,3 +343,58 @@ Internal
   rather than deprecated: a wrapper that skipped the attachment check would
   have kept the silent-drop path alive. Only reachable by a third-party tool
   that used the trait directly.
+
+1.0.0-pl
+========
+First stable release. Everything below is in addition to the beta5 entry.
+
+- element_save can now define an element, not just name and fill it. A template
+  variable was always a plain text field because the tool forwarded `type` and
+  nothing else; a MIGX, listbox or image TV could not be created or configured
+  at all. Adds input_type, caption, elements, input_properties,
+  output_properties, display and rank for template variables, default properties
+  for snippets, plugins and templates, disabled for plugins, and locked for all.
+
+  MODX's property names for these bear almost no relation to the columns:
+  `elements` is submitted as `els`, and a TV's option blobs are not objects to
+  the processor at all -- it scans every submitted property for an `inopt_` or
+  `prop_` prefix and rebuilds the column from what it finds. The mapping lives
+  in one table. Omitting the option blobs is safe: the Update processor only
+  writes those columns when at least one prefixed key is present, so an
+  unrelated save leaves a MIGX configuration alone.
+
+  Default properties do not ride on the save. `propdata` is read by the Create
+  processors and ignored by every Update processor, which would have made this a
+  silent no-op on update, so it goes through the same separate processor the
+  Manager uses.
+
+  `display_params` is not offered: the processor docblocks advertise it and the
+  xPDO map has no such column, so it never did anything.
+
+- resource_get takes include_tv_state, reporting per template variable whether
+  the value is stored on the resource or inherited from the TV default.
+  getValue() falls back to default_text only on a strict null, so a TV
+  deliberately blanked over a non-empty default is otherwise indistinguishable
+  from one nobody has set. Off by default and emitted as a sibling key, so the
+  tvs map that resource_update round-trips is unchanged.
+
+- OnMCPCollectAdvisories is registered on install. It shipped in the code and
+  the changelog in beta5 without a modEvent row, so no plugin could bind to it.
+
+- The readme said this server implements revision 2026-07-28 only and rejects
+  earlier clients. Dual-era support shipped in beta4; every currently-shipping
+  MCP client speaks the older era, so the packaged documentation was telling the
+  entire real-world client population not to bother. It also claimed every write
+  goes through a processor, which is untrue of generic object access and SeoSuite
+  redirects. Both corrected, and the readme now lists the tools.
+
+- warnings is present only when there is something to say. Five tools emitted an
+  empty array and four omitted the key, splitting single tool families:
+  element_save guarded while element_delete did not. site_info is deliberately
+  unchanged, because there the field is the payload rather than a diagnostic
+  attached to a write. The two generic-object tools keep their permanent
+  xPDO-bypass disclaimer.
+
+- Test coverage for the five tools neither suite touched: object_list (which
+  carries the beta2 SQL-injection fix and had no regression test), object_save,
+  schema_list, schema_describe and updates, plus the snippet element type.

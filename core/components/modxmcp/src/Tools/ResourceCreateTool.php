@@ -132,7 +132,7 @@ final class ResourceCreateTool extends AbstractTool
         // Read the row back: this processor returns only the id.
         $newId  = (int) ($object['id'] ?? 0);
         $result = $this->summarise($modx, $newId);
-        $result['warnings'] = array_merge(
+        $warnings = array_merge(
             $this->parentWarnings($modx, $parent, $showInTree),
             $this->classKeyWarnings($modx, $classKey, false),
             $publishWarnings,
@@ -140,6 +140,9 @@ final class ResourceCreateTool extends AbstractTool
             // actually stored rather than what the processor claimed.
             $this->publishStateWarnings($modx, $arguments, $properties, $result)
         );
+        if ($warnings !== []) {
+            $result['warnings'] = $warnings;
+        }
 
         // Only the names the caller passed. Echoing the template's whole TV set
         // would make a one-field write cost whatever the template costs, and a

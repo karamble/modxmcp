@@ -84,6 +84,51 @@ an initialize handshake, so a modern-only server would have nothing able to
 connect to it.
 
 
+TOOLS
+-----
+
+Resources
+  resource_list       browse and search, with filters and a validated sort
+  resource_get        one resource, its content and template variable values
+  resource_create     create through the Manager save path
+  resource_update     partial update; the stored row is resubmitted for you
+  resource_duplicate  copy, then re-save so extras register the copy
+  resource_delete     soft delete, recoverable from the recycle bin
+
+Elements (chunks, snippets, templates, template variables, plugins)
+  element_list        browse by type
+  element_get         one element, its body and its bindings
+  element_save        create or update, including what defines a template
+                      variable and what a plugin is bound to
+  element_delete      permanent; elements have no recycle bin
+  category_list       categories with per-type element counts
+  category_save       create or rename a category
+
+Finding things
+  search              literal text across element bodies and resource content,
+                      with a tag_reference mode that finds every call site of a
+                      named element
+
+Orientation and housekeeping
+  site_info           version, contexts, templates, extras, and advisories for
+                      the conditions this site actually exhibits
+  updates             what is installed and what is behind, read from the cache
+                      the Manager dashboard writes. Cannot install or update
+  cache_refresh       clear caches; rarely needed, since writes invalidate
+
+Schema and generic object access
+  schema_list         classes every installed extra defines
+  schema_describe     fields, relations and whether access is permitted
+  object_list         read rows of an allowlisted class
+  object_save         write a row of an allowlisted class, outside processors
+  object_delete       delete a row of an allowlisted class
+
+Present only where the extra is installed
+  collections_containers   Collections containers and the rule for their children
+  seo_redirect             SeoSuite redirects
+  migx_describe            the item structure behind a MIGX template variable
+
+
 GENERIC OBJECT ACCESS
 ---------------------
 

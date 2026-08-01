@@ -553,6 +553,96 @@ rsort($expected);
 check('resource_list sorts by a validated column', $ids === $expected,
     'ids came back as ' . implode(',', $ids));
 
+// --- schema and generic object access ----------------------------------------
+//
+// These carry the beta2 SQL-injection fix and the redaction write-back guard,
+// and until now neither suite touched them.
+$schemas = call($url, $token, 'modxmcp_schema_list', []);
+check('schema_list returns discovered classes',
+    (int) ($schemas['result']['shown'] ?? 0) > 0 || !empty($schemas['result']['extras']),
+    $schemas['error']['message'] ?? '');
+
+$described = call($url, $token, 'modxmcp_schema_describe', ['class' => 'MODX\\Revolution\\modResource']);
+check('schema_describe describes a core class',
+    !empty($described['result']['fields']) || !empty($described['result']['access']),
+    $described['error']['message'] ?? '');
+
+$blocked = call($url, $token, 'modxmcp_schema_describe', ['class' => 'MODX\\Revolution\\modUser']);
+check('schema_describe refuses a hard-blocked class',
+    !empty($blocked['isError']) || $blocked['error'] !== null,
+    'modUser holds credentials and is blocked by ClassGuard');
+
+// The injection this fix exists for: the operator half of a filter key was
+// interpolated into SQL, so "id:) OR 1=1 -- " was a working injection.
+$injection = call($url, $token, 'modxmcp_object_list', [
+    'class'   => 'MODX\\Revolution\\modCategory',
+    'filters' => ['id:) OR 1=1 -- ' => 1],
+]);
+check('object_list rejects an operator outside the allowlist',
+    !empty($injection['isError']) || $injection['error'] !== null,
+    'this exact key was a working SQL injection before beta2');
+
+$badField = call($url, $token, 'modxmcp_object_list', [
+    'class'   => 'MODX\\Revolution\\modCategory',
+    'filters' => ['no_such_column:=' => 1],
+]);
+check('object_list rejects an unknown field',
+    !empty($badField['isError']) || $badField['error'] !== null);
+
+$guarded = call($url, $token, 'modxmcp_object_save', [
+    'class'  => 'MODX\\Revolution\\modUser',
+    'values' => ['username' => 'nope'],
+]);
+check('object_save refuses a hard-blocked class',
+    !empty($guarded['isError']) || $guarded['error'] !== null,
+    'no setting can enable modUser');
+
+$subclass = call($url, $token, 'modxmcp_object_save', [
+    'class'  => 'MODX\\Revolution\\modDocument',
+    'values' => ['pagetitle' => 'nope'],
+]);
+check('object_save refuses a resource SUBCLASS, not just the base',
+    !empty($subclass['isError']) || $subclass['error'] !== null,
+    'modDocument is what real pages are; the guard tests ancestry');
+
+// --- updates -----------------------------------------------------------------
+$upd = call($url, $token, 'modxmcp_updates', []);
+check('updates reports installed packages',
+    is_array($upd['result']['packages'] ?? null) && $upd['result']['packages'] !== [],
+    $upd['error']['message'] ?? '');
+check('updates never reports a package as both known and unknown',
+    array_sum($upd['result']['counts'] ?? []) === count($upd['result']['packages'] ?? []));
+$states = array_unique(array_column($upd['result']['packages'] ?? [], 'update_state'));
+check('updates only uses the three defined states',
+    array_diff($states, ['update_available', 'current', 'unknown']) === [],
+    implode(', ', $states));
+check('updates collapses superseded versions by default',
+    count($upd['result']['packages'] ?? [])
+        <= count(call($url, $token, 'modxmcp_updates', ['installed_only' => false])['result']['packages'] ?? []));
+
+// --- cache -------------------------------------------------------------------
+$refreshed = call($url, $token, 'modxmcp_cache_refresh', ['partitions' => ['resource']]);
+check('cache_refresh accepts a named partition',
+    ($refreshed['result']['refreshed'] ?? null) === true,
+    $refreshed['error']['message'] ?? '');
+
+// --- snippet element ---------------------------------------------------------
+//
+// The one element type neither suite covered, and the one whose content column
+// collides with the chunk's.
+$snipName = 'modxmcpToolTestSnippet' . $sfx;
+$snip = call($url, $token, 'modxmcp_element_save', [
+    'type' => 'snippet', 'name' => $snipName,
+    'content' => 'return "sentinel";',
+    'properties' => [['name' => 'tpl', 'value' => 'myChunk', 'type' => 'textfield', 'desc' => '']],
+]);
+check('element_save creates a snippet', empty($snip['isError']) && $snip['error'] === null,
+    $snip['error']['message'] ?? '');
+$snipRead = call($url, $token, 'modxmcp_element_get', ['type' => 'snippet', 'name' => $snipName]);
+check('the snippet body round-trips',
+    ($snipRead['result']['content'] ?? '') === 'return "sentinel";');
+call($url, $token, 'modxmcp_element_delete', ['type' => 'snippet', 'name' => $snipName]);
+
 // --- error quality -----------------------------------------------------------
 $dupe = call($url, $token, 'modxmcp_resource_create', [
     'pagetitle' => 'duplicate alias probe',
