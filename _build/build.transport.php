@@ -21,6 +21,44 @@ const PKG_RELEASE = 'pl';
 
 $root = dirname(__DIR__) . '/';
 
+// ---------------------------------------------------------------------------
+// Version agreement, checked before anything is built.
+//
+// Three numbers describe this package and nothing kept them in step: the
+// constants above, Server::VERSION (which every MCP client reads as
+// serverInfo.version and which dev/deploy.sh uses as its drift check), and the
+// newest changelog heading. They drifted for five releases -- 1.0.0-beta5
+// shipped reporting 0.4.0 -- because agreeing was a manual habit rather than a
+// build step.
+//
+// A mismatch fails the build. Shipping a package that misreports its own
+// version is not detectable afterwards by looking at the zip.
+// ---------------------------------------------------------------------------
+
+$serverPhp = @file_get_contents($root . 'core/components/modxmcp/src/Server.php');
+if ($serverPhp === false || !preg_match("/VERSION\s*=\s*'([^']+)'/", $serverPhp, $m)) {
+    exit("Could not read Server::VERSION. Refusing to build a package that cannot verify itself.\n");
+}
+
+if ($m[1] !== PKG_VERSION) {
+    exit(sprintf(
+        "Version mismatch: Server::VERSION is '%s' but PKG_VERSION is '%s'.\n"
+        . "Clients read Server::VERSION as serverInfo.version, so this package would report\n"
+        . "the wrong version to every caller. Set both, then build.\n",
+        $m[1],
+        PKG_VERSION
+    ));
+}
+
+$heading   = PKG_VERSION . '-' . PKG_RELEASE;
+$changelog = @file_get_contents($root . 'core/components/modxmcp/docs/changelog.txt');
+if ($changelog === false || !preg_match('/^' . preg_quote($heading, '/') . '$/m', $changelog)) {
+    exit(sprintf(
+        "The changelog has no '%s' section. Add it, then build.\n",
+        $heading
+    ));
+}
+
 if (!is_readable(__DIR__ . '/build.config.php')) {
     exit("Copy _build/build.config.sample.php to _build/build.config.php and set the paths.\n");
 }
@@ -146,8 +184,26 @@ $builder->setPackageAttributes([
 $modx->log(modX::LOG_LEVEL_INFO, 'packing...');
 $builder->pack();
 
+// The fingerprint of what was just packaged. Rebuilding the same signature is
+// legitimate and normal during a release; this is how you tell the resulting
+// zip apart from the one it replaced, and how you confirm afterwards that the
+// install actually took. modxmcp_site_info reports the same value for the code
+// running on a site.
+require_once $root . 'core/components/modxmcp/src/Server.php';
+require_once $root . 'core/components/modxmcp/src/Build.php';
+$build = MODXMCP\Build::describe();
+
 $modx->log(modX::LOG_LEVEL_INFO, sprintf(
-    'built %s-%s-%s.transport.zip',
+    'built %s-%s-%s.transport.zip (build %s, %d source files)',
+    PKG_NAME,
+    PKG_VERSION,
+    PKG_RELEASE,
+    $build['build'],
+    $build['files']
+));
+
+$modx->log(modX::LOG_LEVEL_INFO, sprintf(
+    'install it with: php dev/package-install.php %s-%s-%s',
     PKG_NAME,
     PKG_VERSION,
     PKG_RELEASE

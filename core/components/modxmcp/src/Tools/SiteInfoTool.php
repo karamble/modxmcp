@@ -6,6 +6,7 @@ use MODX\Revolution\modContext;
 use MODX\Revolution\modNamespace;
 use MODX\Revolution\modTemplate;
 use MODX\Revolution\modX;
+use MODXMCP\Build;
 use MODXMCP\Knowledge\AdvisoryCollector;
 use MODXMCP\Registry\ToolInterface;
 
@@ -113,6 +114,10 @@ final class SiteInfoTool implements ToolInterface
 
         return [
             'modx_version' => $this->modxVersion($modx),
+            // Version plus a hash of the running code. Two builds of the same
+            // version are otherwise indistinguishable, and MODX will silently
+            // install a stale one; see MODXMCP\Build.
+            'modxmcp'      => Build::describe(),
             'php_version'  => PHP_VERSION,
             'site_name'    => $modx->getOption('site_name'),
             'site_url'     => $modx->getOption('site_url'),

@@ -110,7 +110,8 @@ Finding things
                       named element
 
 Orientation and housekeeping
-  site_info           version, contexts, templates, extras, and advisories for
+  site_info           versions (including a build fingerprint of the running
+                      code), contexts, templates, extras, and advisories for
                       the conditions this site actually exhibits
   updates             what is installed and what is behind, read from the cache
                       the Manager dashboard writes. Cannot install or update

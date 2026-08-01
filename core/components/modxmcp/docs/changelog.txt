@@ -348,6 +348,29 @@ Internal
 ========
 First stable release. Everything below is in addition to the beta5 entry.
 
+- modxmcp_site_info now reports a build fingerprint alongside the version:
+  {"version": "1.0.0", "build": "<hash>", "files": 76}. The version alone
+  cannot say which code is running. An rsync deploy changes the files without
+  changing it, and a rebuilt transport package keeps its signature by
+  definition, so two different builds of 1.0.0-pl were indistinguishable from
+  anywhere. The fingerprint hashes every PHP file under src/ and is computed
+  per request, never cached, because a cached value would survive an rsync and
+  then assert the wrong build with total confidence.
+- The build now refuses to run unless PKG_VERSION, Server::VERSION and the
+  newest changelog heading agree. They had drifted for five releases:
+  1.0.0-beta5 shipped reporting 0.4.0. _build/build.transport.php also prints
+  the fingerprint of what it packaged.
+- New dev/package-install.php installs by signature after removing the stale
+  transport_packages row and the stale extracted directory, then prints the
+  fingerprint of what was installed. Both removals are required: ScanLocal
+  skips signatures it already knows, and modTransportPackage::getTransport()
+  only unzips when core/packages/<signature>/ is absent. Reinstalling a rebuilt
+  package therefore installed the previous build, silently, while continuing to
+  report the expected version. That is what reverted a site to beta2 during
+  this release.
+- Removed dev/package-install-test.php, which installed whichever modxmcp
+  package it happened to find first.
+
 - element_save can now define an element, not just name and fill it. A template
   variable was always a plain text field because the tool forwarded `type` and
   nothing else; a MIGX, listbox or image TV could not be created or configured
