@@ -5,6 +5,7 @@ namespace MODXMCP\Tools;
 use MODX\Revolution\modPluginEvent;
 use MODX\Revolution\modTemplateVarTemplate;
 use MODX\Revolution\modX;
+use MODXMCP\Protocol\McpException;
 use MODXMCP\Registry\Schema;
 
 /**
@@ -45,7 +46,24 @@ final class ElementSaveTool extends AbstractTool
                 'content'     => Schema::string('The body. For a snippet or plugin this is PHP '
                     . 'WITHOUT the opening <?php tag, matching how MODX stores it.'),
                 'description' => Schema::string('Description.'),
-                'category'    => Schema::integer('Category id. 0 for uncategorised.', 0),
+                'category'    => Schema::string(
+                    'Category, as an id or a name. 0 for uncategorised. A name that does not '
+                    . 'exist is refused rather than created: use modxmcp_category_list to see '
+                    . 'what this site has, and modxmcp_category_save to add one.'),
+                'events'      => Schema::arrayOf(
+                    'PLUGINS ONLY. System event names to bind this plugin to, e.g. '
+                    . '["OnDocFormSave", "OnWebPagePrerender"]. A plugin bound to no events is '
+                    . 'never executed by MODX, so this is effectively required when creating '
+                    . 'one. Passing a list replaces the current bindings: events you omit are '
+                    . 'unbound. Omit the argument entirely to leave existing bindings alone.',
+                    ['type' => 'string']),
+                'templates'   => Schema::arrayOf(
+                    'TEMPLATE VARIABLES ONLY. Templates this TV is attached to, as ids or '
+                    . 'template names. A TV attached to no template renders on no resource, and '
+                    . 'modxmcp_resource_create and modxmcp_resource_update cannot write a value '
+                    . 'to it. Passing a list replaces the current attachments: templates you '
+                    . 'omit are detached. Omit the argument entirely to leave them alone.',
+                    ['type' => ['string', 'integer']]),
             ], ['type']),
         ];
     }
@@ -54,6 +72,11 @@ final class ElementSaveTool extends AbstractTool
     {
         $typeKey = strtolower((string) $this->requireArg($arguments, 'type'));
         $type    = $this->elementType($typeKey);
+
+        $this->rejectMisplaced($arguments, $typeKey, [
+            'events'    => ['plugin'],
+            'templates' => ['tv'],
+        ]);
 
         $id   = $this->arg($arguments, 'id');
         $name = $this->arg($arguments, 'name');
@@ -93,7 +116,30 @@ final class ElementSaveTool extends AbstractTool
             $properties['description'] = (string) $description;
         }
         if (array_key_exists('category', $arguments) && $arguments['category'] !== null) {
-            $properties['category'] = (int) $arguments['category'];
+            $properties['category'] = $this->resolveCategoryId($modx, $arguments['category']);
+        }
+
+        // Bindings live in their own tables, and both Create and Update accept
+        // them as a property, so they ride along on the same processor call and
+        // there is no window where the element exists unbound. Resolved before
+        // the save so an unknown event or template fails before anything is
+        // written. The differential is computed against the existing element,
+        // or against nothing when creating.
+        $existingId = $existing ? (int) $existing->get('id') : 0;
+
+        if (($events = $this->arg($arguments, 'events')) !== null) {
+            if (!is_array($events)) {
+                throw McpException::invalidParams('events must be an array of event names.');
+            }
+            $properties['events'] = $this->pluginEventPayload($modx, $existingId, $events);
+        }
+
+        if (($templates = $this->arg($arguments, 'templates')) !== null) {
+            if (!is_array($templates)) {
+                throw McpException::invalidParams(
+                    'templates must be an array of template ids or names.');
+            }
+            $properties['templates'] = $this->templateAccessPayload($modx, $existingId, $templates);
         }
 
         $created = $existing === null;
@@ -112,6 +158,16 @@ final class ElementSaveTool extends AbstractTool
         $result            = $this->normaliseElement($object, $type, false);
         $result['type']    = $typeKey;
         $result['created'] = $created;
+
+        // Echo the bindings back, since they are the thing most likely to be
+        // wrong and the caller cannot otherwise see whether they landed.
+        $savedId = (int) ($object['id'] ?? 0);
+        if ($typeKey === 'plugin' && $savedId > 0) {
+            $result['events'] = array_column($this->pluginEvents($modx, $savedId), 'name');
+        }
+        if ($typeKey === 'tv' && $savedId > 0) {
+            $result['templates'] = $this->tvTemplates($modx, $savedId);
+        }
 
         $warnings = [];
 

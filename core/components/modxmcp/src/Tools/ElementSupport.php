@@ -2,11 +2,16 @@
 
 namespace MODXMCP\Tools;
 
+use MODX\Revolution\modCategory;
 use MODX\Revolution\modChunk;
+use MODX\Revolution\modEvent;
 use MODX\Revolution\modPlugin;
+use MODX\Revolution\modPluginEvent;
 use MODX\Revolution\modSnippet;
 use MODX\Revolution\modTemplate;
 use MODX\Revolution\modTemplateVar;
+use MODX\Revolution\modTemplateVarTemplate;
+use MODX\Revolution\modX;
 use MODXMCP\Protocol\McpException;
 
 /**
@@ -119,5 +124,262 @@ trait ElementSupport
         }
 
         return $out;
+    }
+
+    /**
+     * Refuse arguments that mean nothing for the type being saved.
+     *
+     * Two element types carry a binding that lives in its own table, and each
+     * argument for one is meaningless for the other four. Silently ignoring a
+     * misplaced key is how the missing plugin-event binding went unnoticed for
+     * so long: the call looked like it had done what was asked.
+     *
+     * Scoped to the keys named here on purpose. Genuinely unknown keys are
+     * still ignored, exactly as before, so no existing caller can break on an
+     * argument this tool never claimed to read.
+     *
+     * @param array<string,mixed>   $arguments
+     * @param array<string,string[]> $scoped property => element types it applies to
+     * @throws McpException
+     */
+    protected function rejectMisplaced(array $arguments, string $typeKey, array $scoped): void
+    {
+        foreach ($scoped as $property => $validFor) {
+            if (!array_key_exists($property, $arguments) || $arguments[$property] === null) {
+                continue;
+            }
+            if (in_array($typeKey, $validFor, true)) {
+                continue;
+            }
+            throw McpException::invalidParams(sprintf(
+                "'%s' applies to %s, not to %s. Nothing was written.",
+                $property,
+                implode(' and ', array_map(fn($t) => $t . 's', $validFor)),
+                $typeKey . 's'
+            ));
+        }
+    }
+
+    /**
+     * System events a plugin is bound to, in priority order.
+     *
+     * @return array<int,array{name:string,priority:int,propertyset:int}>
+     */
+    protected function pluginEvents(modX $modx, int $pluginId): array
+    {
+        $events = [];
+        foreach ($modx->getIterator(modPluginEvent::class, ['pluginid' => $pluginId]) as $binding) {
+            $events[] = [
+                'name'        => (string) $binding->get('event'),
+                'priority'    => (int) $binding->get('priority'),
+                'propertyset' => (int) $binding->get('propertyset'),
+            ];
+        }
+        usort($events, fn($a, $b) => [$a['priority'], $a['name']] <=> [$b['priority'], $b['name']]);
+        return $events;
+    }
+
+    /**
+     * Templates a template variable is attached to.
+     *
+     * @return array<int,array{id:int,name:string}>
+     */
+    protected function tvTemplates(modX $modx, int $tvId): array
+    {
+        $ids = [];
+        foreach ($modx->getIterator(modTemplateVarTemplate::class, ['tmplvarid' => $tvId]) as $link) {
+            $ids[] = (int) $link->get('templateid');
+        }
+        if ($ids === []) {
+            return [];
+        }
+
+        $templates = [];
+        foreach ($modx->getIterator(modTemplate::class, ['id:IN' => $ids]) as $template) {
+            $templates[] = [
+                'id'   => (int) $template->get('id'),
+                'name' => (string) $template->get('templatename'),
+            ];
+        }
+        usort($templates, fn($a, $b) => $a['id'] <=> $b['id']);
+        return $templates;
+    }
+
+    /**
+     * Resolve a category given as an id or a name.
+     *
+     * A name that does not exist is refused rather than created. Auto-creating
+     * on a save is how a site ends up with "Blog", "blog" and "Blog " as three
+     * separate categories, and the caller cannot see it happening. Creating one
+     * is a deliberate act with its own tool.
+     *
+     * @param int|string $entry
+     * @throws McpException
+     */
+    protected function resolveCategoryId(modX $modx, $entry): int
+    {
+        if (is_int($entry) || ctype_digit((string) $entry)) {
+            return (int) $entry;
+        }
+
+        $name = trim((string) $entry);
+        if ($name === '') {
+            return 0;
+        }
+
+        /** @var modCategory|null $category */
+        $category = $modx->getObject(modCategory::class, ['category' => $name]);
+        if ($category) {
+            return (int) $category->get('id');
+        }
+
+        $available = [];
+        foreach ($modx->getIterator(modCategory::class) as $row) {
+            $available[] = (string) $row->get('category');
+        }
+        sort($available);
+
+        throw McpException::invalidParams(sprintf(
+            "No category named '%s'. %s Create it with modxmcp_category_save, or pass 0 for "
+            . 'uncategorised. Nothing was written.',
+            $name,
+            $available === []
+                ? 'This site has no categories yet.'
+                : 'This site has: ' . implode(', ', array_slice($available, 0, 40)) . '.'
+        ));
+    }
+
+    /**
+     * Turn a caller's event list into what Element/Plugin expects.
+     *
+     * Each entry is handed to the Plugin/Event/Update processor, which keys on
+     * 'event' and treats 'enabled' as the switch: truthy binds, falsy unbinds.
+     * Unbinding an event that was never bound makes that sub-processor fail and
+     * log, so only currently-bound events are emitted with enabled=false.
+     *
+     * @param array<int,mixed> $wanted event names
+     * @return array<int,array{name:string,enabled:bool,priority:int,propertyset:int}>
+     * @throws McpException
+     */
+    protected function pluginEventPayload(modX $modx, int $pluginId, array $wanted): array
+    {
+        $names = [];
+        foreach ($wanted as $entry) {
+            if (!is_string($entry) && !is_numeric($entry)) {
+                throw McpException::invalidParams(
+                    'events must be a list of system event names, e.g. ["OnDocFormSave"]. '
+                    . 'Nothing was written.');
+            }
+            $name = trim((string) $entry);
+            if ($name !== '') {
+                $names[] = $name;
+            }
+        }
+        $names = array_values(array_unique($names));
+
+        $unknown = [];
+        foreach ($names as $name) {
+            if ($modx->getCount(modEvent::class, ['name' => $name]) === 0) {
+                $unknown[] = $name;
+            }
+        }
+        if ($unknown !== []) {
+            throw McpException::invalidParams(sprintf(
+                'No such system event%s: %s. MODX only fires events it defines, so a binding to '
+                . 'an invented name would never run. Check the spelling, which is '
+                . 'case-sensitive and conventionally starts with "On". Nothing was written.',
+                count($unknown) === 1 ? '' : 's',
+                implode(', ', $unknown)
+            ));
+        }
+
+        $existing = [];
+        foreach ($this->pluginEvents($modx, $pluginId) as $bound) {
+            $existing[$bound['name']] = $bound;
+        }
+
+        $payload = [];
+        foreach ($names as $name) {
+            $payload[] = [
+                'name'        => $name,
+                'enabled'     => true,
+                'priority'    => $existing[$name]['priority'] ?? 0,
+                'propertyset' => $existing[$name]['propertyset'] ?? 0,
+            ];
+        }
+
+        foreach ($existing as $name => $bound) {
+            if (!in_array($name, $names, true)) {
+                $payload[] = [
+                    'name'        => $name,
+                    'enabled'     => false,
+                    'priority'    => $bound['priority'],
+                    'propertyset' => $bound['propertyset'],
+                ];
+            }
+        }
+
+        return $payload;
+    }
+
+    /**
+     * Turn a caller's template list into what Element/TemplateVar expects.
+     *
+     * The processor takes [['id' => n, 'access' => bool], ...] and applies it
+     * differentially: truthy attaches, falsy detaches, and a template not in
+     * the list is left alone. So "set these" has to be expressed as "attach
+     * these, detach everything currently attached that is not in the list",
+     * which is what a caller passing a list actually means.
+     *
+     * @param array<int,int|string> $wanted ids or template names
+     * @return array<int,array{id:int,access:bool}>
+     * @throws McpException
+     */
+    protected function templateAccessPayload(modX $modx, int $tvId, array $wanted): array
+    {
+        $wantedIds = [];
+        foreach ($wanted as $entry) {
+            $wantedIds[] = $this->resolveTemplateId($modx, $entry);
+        }
+        $wantedIds = array_values(array_unique($wantedIds));
+
+        $payload = [];
+        foreach ($wantedIds as $id) {
+            $payload[] = ['id' => $id, 'access' => true];
+        }
+
+        foreach ($this->tvTemplates($modx, $tvId) as $current) {
+            if (!in_array($current['id'], $wantedIds, true)) {
+                $payload[] = ['id' => $current['id'], 'access' => false];
+            }
+        }
+
+        return $payload;
+    }
+
+    /**
+     * @param int|string $entry
+     * @throws McpException
+     */
+    private function resolveTemplateId(modX $modx, $entry): int
+    {
+        if (is_int($entry) || ctype_digit((string) $entry)) {
+            $id = (int) $entry;
+            if ($modx->getCount(modTemplate::class, ['id' => $id]) > 0) {
+                return $id;
+            }
+            throw McpException::invalidParams("No template with id {$id}. Nothing was written.");
+        }
+
+        /** @var modTemplate|null $template */
+        $template = $modx->getObject(modTemplate::class, ['templatename' => (string) $entry]);
+        if (!$template) {
+            throw McpException::invalidParams(sprintf(
+                "No template named '%s'. Use modxmcp_element_list with type=template to see "
+                . 'what exists. Nothing was written.',
+                $entry
+            ));
+        }
+        return (int) $template->get('id');
     }
 }

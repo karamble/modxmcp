@@ -12,6 +12,9 @@ use MODXMCP\Registry\Schema;
 final class ElementGetTool extends AbstractTool
 {
     use ElementSupport;
+    // For attachedTvs(): a template's TV list is the only place the resource
+    // tools' "attached" rule is visible before you trip over it.
+    use TemplateVarSupport;
 
     public function name(): string
     {
@@ -55,7 +58,32 @@ final class ElementGetTool extends AbstractTool
         }
 
         $out = $this->normaliseElement($element->toArray(), $type, true);
-        $out['type'] = strtolower((string) $arguments['type']);
+        $typeKey = strtolower((string) $arguments['type']);
+        $out['type'] = $typeKey;
+
+        // Bindings live in their own tables and decide whether the element does
+        // anything at all, so they belong in a read of it. A plugin bound to no
+        // events never runs; a TV attached to no template renders nowhere and
+        // cannot be written by the resource tools.
+        $elementId = (int) $element->get('id');
+        if ($typeKey === 'plugin') {
+            $out['events'] = array_column($this->pluginEvents($modx, $elementId), 'name');
+        }
+        if ($typeKey === 'tv') {
+            $out['templates'] = $this->tvTemplates($modx, $elementId);
+        }
+        if ($typeKey === 'template') {
+            // The only TVs the resource tools can write on a resource using this
+            // template, which is not discoverable anywhere else in the surface.
+            $out['template_vars'] = array_values(array_map(
+                fn($tv) => [
+                    'id'         => (int) $tv->get('id'),
+                    'name'       => (string) $tv->get('name'),
+                    'input_type' => (string) $tv->get('type'),
+                ],
+                $this->attachedTvs($modx, $elementId)
+            ));
+        }
 
         // A static element's body lives on disk; editing the database copy would
         // be silently discarded on the next render.

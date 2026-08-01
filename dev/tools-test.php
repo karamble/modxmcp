@@ -301,6 +301,93 @@ $badType = call($url, $token, 'modxmcp_element_list', ['type' => 'nonsense']);
 check('unknown element type is rejected clearly',
     $badType['status'] !== 200 || !empty($badType['isError']) || !empty($badType['error']));
 
+// --- element bindings and categories -----------------------------------------
+//
+// A plugin bound to no events is never executed and a TV attached to no template
+// renders nowhere, yet both used to save with a clean success.
+$catName  = 'modxmcpToolTestCategory';
+$catSaved = call($url, $token, 'modxmcp_category_save', ['name' => $catName]);
+$catId    = (int) ($catSaved['result']['id'] ?? 0);
+check('category_save creates a category', $catId > 0, $catSaved['error']['message'] ?? '');
+
+$catList = call($url, $token, 'modxmcp_category_list', ['search' => 'modxmcpToolTest']);
+check('category_list finds it by name',
+    (bool) array_filter($catList['result']['categories'] ?? [],
+        fn($c) => ($c['name'] ?? '') === $catName));
+
+$categorised = 'modxmcpToolTestCategorised';
+$byName = call($url, $token, 'modxmcp_element_save', [
+    'type'     => 'chunk',
+    'name'     => $categorised,
+    'content'  => 'x',
+    'category' => $catName,
+]);
+check('element_save resolves a category by name',
+    (int) ($byName['result']['category'] ?? 0) === $catId && $catId > 0);
+
+$badCat = call($url, $token, 'modxmcp_element_save', [
+    'type'     => 'chunk',
+    'name'     => 'modxmcpToolTestBadCategory',
+    'category' => 'modxmcpNoSuchCategory',
+]);
+check('an unknown category name is refused, not created',
+    !empty($badCat['isError']) || $badCat['error'] !== null);
+
+$pluginName  = 'modxmcpToolTestPlugin';
+$boundPlugin = call($url, $token, 'modxmcp_element_save', [
+    'type'    => 'plugin',
+    'name'    => $pluginName,
+    'content' => '/* modxmcp tool test */',
+    'events'  => ['OnDocFormSave'],
+]);
+check('element_save binds a plugin to its events',
+    in_array('OnDocFormSave', $boundPlugin['result']['events'] ?? [], true),
+    $boundPlugin['error']['message'] ?? '');
+check('a bound plugin does not warn about never executing',
+    !array_filter($boundPlugin['result']['warnings'] ?? [],
+        fn($w) => stripos($w, 'never execute') !== false));
+
+$badEvent = call($url, $token, 'modxmcp_element_save', [
+    'type'   => 'plugin',
+    'name'   => $pluginName,
+    'events' => ['OnNoSuchEventEver'],
+]);
+check('an unknown system event is rejected',
+    !empty($badEvent['isError']) || $badEvent['error'] !== null,
+    'a binding to an invented event would never fire');
+
+$misplaced = call($url, $token, 'modxmcp_element_save', [
+    'type'   => 'chunk',
+    'name'   => $chunkName,
+    'events' => ['OnDocFormSave'],
+]);
+check('a type-scoped argument sent for the wrong type is rejected',
+    !empty($misplaced['isError']) || $misplaced['error'] !== null,
+    'events applies to plugins, not chunks');
+
+// The TV created earlier is unattached, which is what made the resource-side
+// rejection deterministic. Attaching it should now be possible from here.
+$tvTemplates = call($url, $token, 'modxmcp_element_list', ['type' => 'template', 'limit' => 1]);
+$anyTemplate = (int) ($tvTemplates['result']['elements'][0]['id'] ?? 0);
+if ($anyTemplate > 0) {
+    $attached = call($url, $token, 'modxmcp_element_save', [
+        'type'      => 'tv',
+        'name'      => $strayTv,
+        'templates' => [$anyTemplate],
+    ]);
+    check('element_save attaches a TV to a template',
+        in_array($anyTemplate, array_column($attached['result']['templates'] ?? [], 'id'), true),
+        $attached['error']['message'] ?? '');
+    check('an attached TV no longer warns that it renders nowhere',
+        !array_filter($attached['result']['warnings'] ?? [],
+            fn($w) => stripos($w, 'attached to no template') !== false));
+
+    $tplRead = call($url, $token, 'modxmcp_element_get', ['type' => 'template', 'id' => $anyTemplate]);
+    check('element_get lists a template\'s attached TVs',
+        in_array($strayTv, array_column($tplRead['result']['template_vars'] ?? [], 'name'), true),
+        'this is how a caller discovers which TVs it may write');
+}
+
 // --- error quality -----------------------------------------------------------
 $dupe = call($url, $token, 'modxmcp_resource_create', [
     'pagetitle' => 'duplicate alias probe',
@@ -322,11 +409,43 @@ check('element_delete succeeds', $chunkDeleted['status'] === 200 && empty($chunk
 check('element delete reports it is NOT recoverable',
     ($chunkDeleted['result']['recoverable'] ?? null) === false);
 
+// Fixtures from the class_key, TV and binding sections.
+foreach ([$shortId ?? 0, $weblinkId ?? 0] as $extraId) {
+    if ((int) $extraId > 0) {
+        call($url, $token, 'modxmcp_resource_delete', ['id' => (int) $extraId]);
+    }
+}
+call($url, $token, 'modxmcp_element_delete', ['type' => 'tv', 'name' => $strayTv]);
+call($url, $token, 'modxmcp_element_delete', ['type' => 'plugin', 'name' => $pluginName]);
+call($url, $token, 'modxmcp_element_delete', ['type' => 'chunk', 'name' => $categorised]);
+// The category last: deleting it earlier would orphan the chunk filed under it.
+//
+// There is no category delete tool, by design, so this goes through the generic
+// object path. That needs write:objects AND modCategory in the writable-classes
+// list, which most sites will not have, so it is best effort and says so rather
+// than leaving an unexplained category behind.
+if (($catId ?? 0) > 0) {
+    $catGone = call($url, $token, 'modxmcp_object_delete', [
+        'class'   => 'MODX\\Revolution\\modCategory',
+        'pk'      => (string) $catId,
+        'confirm' => true,
+    ]);
+    if (!empty($catGone['isError']) || $catGone['error'] !== null) {
+        echo "  NOTE: category '{$catName}' (id {$catId}) was left behind; delete it in the "
+            . "Manager, or allowlist MODX\\Revolution\\modCategory for generic writes.\n";
+    }
+}
+
 // Anything created by the duplicate-alias probe would be a bug, but sweep anyway.
 $stray = call($url, $token, 'modxmcp_resource_list', ['search' => 'duplicate alias probe']);
 foreach ($stray['result']['resources'] ?? [] as $row) {
     call($url, $token, 'modxmcp_resource_delete', ['id' => (int) $row['id']]);
     echo "  swept stray resource {$row['id']}\n";
+}
+$strayBad = call($url, $token, 'modxmcp_resource_list', ['search' => 'modxmcp tool test bad class']);
+foreach ($strayBad['result']['resources'] ?? [] as $row) {
+    call($url, $token, 'modxmcp_resource_delete', ['id' => (int) $row['id']]);
+    echo "  swept stray resource {$row['id']} (a rejected class_key should not have created one)\n";
 }
 
 echo str_repeat('=', 80) . "\n{$pass} passed, {$fail} failed\n";

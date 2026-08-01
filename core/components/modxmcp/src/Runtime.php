@@ -64,6 +64,12 @@ final class Runtime
         $registry->register(new Tools\ElementSaveTool());
         $registry->register(new Tools\ElementDeleteTool());
 
+        // Categories, which elements are filed under. Without these a caller can
+        // read a category id and never learn its name, so "put this in the Blog
+        // category" has no path to an answer.
+        $registry->register(new Tools\CategoryListTool());
+        $registry->register(new Tools\CategorySaveTool());
+
         // Schema discovery. Metadata only, so these need no allowlist: a caller
         // that cannot see what exists cannot tell the user what to enable.
         $registry->register(new Tools\SchemaListTool());

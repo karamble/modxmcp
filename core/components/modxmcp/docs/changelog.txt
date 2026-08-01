@@ -109,6 +109,11 @@ Behaviour changes
   does declare. Callers whose TV writes were silently doing nothing will start
   seeing failures; those writes were never landing.
 
+- element_save rejects type-scoped arguments sent for the wrong element type,
+  e.g. events on a chunk. Genuinely unknown keys are still ignored, as before,
+  so no existing caller can break on an argument this tool never claimed to
+  read.
+
 Fixes
 -----
 
@@ -146,11 +151,31 @@ Additions
   actually stored, for the names you passed. Absent when you passed no TVs, so
   responses are otherwise unchanged.
 
-- element_save warns when a plugin is saved with no event bindings (it will
-  never execute) or a template variable with no template assignment (it renders
-  nowhere and no resource tool can write a value to it). Writing those bindings
-  through the tool surface is not yet supported; the warning names where to set
-  them in the Manager.
+- element_save takes events (plugins) and templates (template variables), so the
+  bindings that decide whether an element does anything at all can finally be
+  written. Both ride along on the same processor call as the save, so there is
+  no window where the element exists unbound. Passing a list replaces the
+  current bindings; omitting the argument leaves them alone. An unknown system
+  event or template is refused before anything is written, because a binding to
+  an invented event would silently never fire. element_save and element_get both
+  echo the current bindings back.
+
+- element_save still warns when a plugin ends up bound to no events, or a
+  template variable attached to no template. Reaching that state is now a choice
+  rather than the only option.
+
+- element_get for a template lists the template variables attached to it. Those
+  are exactly the TVs resource_create and resource_update can write on a
+  resource using that template, and nothing else in the tool surface exposed the
+  relationship.
+
+- modxmcp_category_list and modxmcp_category_save. Categories were the one part
+  of the element surface with no way in: element_save took a numeric category id
+  and element_list returned one, while nothing mapped an id to a name, so "put
+  this in the Blog category" had no path to an answer. element_save.category now
+  accepts a name as well as an id. A name that does not exist is refused rather
+  than created, because auto-creating on save is how a site ends up with "Blog",
+  "blog" and "Blog " as three separate categories.
 
 Internal
 --------
