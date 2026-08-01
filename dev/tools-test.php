@@ -388,6 +388,61 @@ if ($anyTemplate > 0) {
         'this is how a caller discovers which TVs it may write');
 }
 
+// --- search ------------------------------------------------------------------
+//
+// The question this exists for is "who calls this element", which has to be
+// answered before any rename and which nothing else in the surface could answer.
+$needleChunk = 'modxmcpToolTestCalled';
+call($url, $token, 'modxmcp_element_save', [
+    'type' => 'chunk', 'name' => $needleChunk, 'content' => 'x',
+]);
+$callerChunk = 'modxmcpToolTestCaller';
+call($url, $token, 'modxmcp_element_save', [
+    'type'    => 'chunk',
+    'name'    => $callerChunk,
+    'content' => "before [[\$modxmcpToolTestCalled]] after\nsecond [[!modxmcpToolTestCalled]] line",
+]);
+
+$refs = call($url, $token, 'modxmcp_search', [
+    'q'    => $needleChunk,
+    'mode' => 'tag_reference',
+    'in'   => 'elements',
+]);
+$callers = array_column($refs['result']['elements'] ?? [], 'name');
+check('search tag_reference finds the calling element',
+    in_array($callerChunk, $callers, true), $refs['error']['message'] ?? '');
+check('search reports every call site, not just the first',
+    (int) (array_values(array_filter($refs['result']['elements'] ?? [],
+        fn($e) => ($e['name'] ?? '') === $callerChunk))[0]['match_count'] ?? 0) >= 2);
+check('search quotes the surrounding line with a line number',
+    !empty(array_values(array_filter($refs['result']['elements'] ?? [],
+        fn($e) => ($e['name'] ?? '') === $callerChunk))[0]['excerpts'][0]['line'] ?? null));
+
+$literal = call($url, $token, 'modxmcp_search', ['q' => 'through the MCP tool surface']);
+check('search finds text in resource content',
+    (bool) array_filter($literal['result']['resources'] ?? [], fn($r) => (int) $r['id'] === $newId));
+
+// A LIKE wildcard passed through unescaped would match every row in the table.
+$wild = call($url, $token, 'modxmcp_search', ['q' => '%', 'in' => 'resources', 'limit' => 5]);
+check('a LIKE wildcard is escaped, not honoured',
+    (int) ($wild['result']['total_matches'] ?? 0) === 0
+    || !array_filter($wild['result']['resources'] ?? [], fn($r) => (int) $r['id'] === $newId),
+    'searching for "%" must not match everything');
+
+call($url, $token, 'modxmcp_element_delete', ['type' => 'chunk', 'name' => $callerChunk]);
+call($url, $token, 'modxmcp_element_delete', ['type' => 'chunk', 'name' => $needleChunk]);
+
+$badSort = call($url, $token, 'modxmcp_resource_list', ['sort' => 'no_such_column']);
+check('an invalid sort column is rejected, not interpolated',
+    !empty($badSort['isError']) || $badSort['error'] !== null);
+
+$sorted   = call($url, $token, 'modxmcp_resource_list', ['sort' => 'id', 'dir' => 'DESC', 'limit' => 5]);
+$ids      = array_column($sorted['result']['resources'] ?? [], 'id');
+$expected = $ids;
+rsort($expected);
+check('resource_list sorts by a validated column', $ids === $expected,
+    'ids came back as ' . implode(',', $ids));
+
 // --- error quality -----------------------------------------------------------
 $dupe = call($url, $token, 'modxmcp_resource_create', [
     'pagetitle' => 'duplicate alias probe',

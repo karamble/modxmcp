@@ -169,6 +169,29 @@ Additions
   resource using that template, and nothing else in the tool surface exposed the
   relationship.
 
+- modxmcp_search, over element bodies and resource content together. "Who calls
+  [[$productCard]]?" is one question, and its answer is spread across template
+  bodies, other chunks, snippets that build markup, and resource content where
+  an editor pasted the tag by hand; two tools would mean a caller that asks half
+  the question and believes it has the answer.
+
+  mode=tag_reference expands an element name to the MODX tag forms that would
+  call it ([[$name]], [[name]], [[!name]], [[*name]], [[+name]]), which is what
+  you want before a rename. Every match is reported with its line number, not
+  just the first, because a rename needs every call site. The needle is matched
+  literally: regular expressions are not accepted, having no use here and being
+  a denial-of-service primitive. Wildcards are escaped, so searching for "100%"
+  no longer matches every row. Excerpting is multibyte-safe, which matters more
+  than it sounds: slicing UTF-8 with substr() can split a codepoint, and
+  json_encode() answers invalid UTF-8 by returning false for the entire payload,
+  so one accented character could empty a whole response.
+
+- resource_list takes template, class_key and hidemenu filters, and sort with
+  dir. The sort column is validated against the resource field map, the same way
+  object_list validates its own, because a column name reaches SQL as structure
+  rather than as a bound value. The default order is unchanged: callers page
+  through this tool, and silently reordering it would renumber every page.
+
 - modxmcp_category_list and modxmcp_category_save. Categories were the one part
   of the element surface with no way in: element_save took a numeric category id
   and element_list returned one, while nothing mapped an id to a name, so "put

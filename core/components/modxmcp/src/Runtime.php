@@ -70,6 +70,11 @@ final class Runtime
         $registry->register(new Tools\CategoryListTool());
         $registry->register(new Tools\CategorySaveTool());
 
+        // Cross-cutting search. No MODX processor equivalent, because the
+        // Manager has no screen for it, and answering "who calls this element"
+        // is the question that has to be settled before any rename.
+        $registry->register(new Tools\SearchTool());
+
         // Schema discovery. Metadata only, so these need no allowlist: a caller
         // that cannot see what exists cannot tell the user what to enable.
         $registry->register(new Tools\SchemaListTool());

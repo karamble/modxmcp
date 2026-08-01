@@ -4,6 +4,7 @@ namespace MODXMCP\Tools;
 
 use MODX\Revolution\modResource;
 use MODX\Revolution\modX;
+use MODXMCP\Protocol\McpException;
 use MODXMCP\Registry\Schema;
 
 /**
@@ -33,6 +34,13 @@ final class ResourceListTool extends AbstractTool
                 'search'      => Schema::string('Match against pagetitle, alias and longtitle.'),
                 'published'   => Schema::boolean('Filter by published state. Omit for both.'),
                 'include_deleted' => Schema::boolean('Include resources in the recycle bin.', false),
+                'template'    => Schema::integer('Only resources using this template id.'),
+                'class_key'   => Schema::string('Only resources of this type, e.g. '
+                    . 'MODX\\Revolution\\modWebLink or a Collections container class.'),
+                'hidemenu'    => Schema::boolean('Filter by whether the resource is hidden from menus.'),
+                'sort'        => Schema::string('Column to sort by, e.g. publishedon, menuindex, '
+                    . 'pagetitle, id. Defaults to menuindex then id, which is tree order.'),
+                'dir'         => Schema::enum('Sort direction.', ['ASC', 'DESC'], 'ASC'),
                 'limit'       => Schema::integer('Maximum rows.', 25),
                 'offset'      => Schema::integer('Rows to skip, for paging.', 0),
             ]),
@@ -66,10 +74,27 @@ final class ResourceListTool extends AbstractTool
             ]);
         }
 
+        if (($template = $this->arg($arguments, 'template')) !== null) {
+            $query->where(['template' => (int) $template]);
+        }
+        if (($classKey = $this->arg($arguments, 'class_key')) !== null) {
+            $query->where(['class_key' => (string) $classKey]);
+        }
+        if (array_key_exists('hidemenu', $arguments) && $arguments['hidemenu'] !== null) {
+            $query->where(['hidemenu' => !empty($arguments['hidemenu']) ? 1 : 0]);
+        }
+
         $total = $modx->getCount(modResource::class, $query);
 
-        $query->sortby('menuindex', 'ASC');
-        $query->sortby('id', 'ASC');
+        // The default is deliberately unchanged. Callers page through this, and
+        // silently reordering a shipped list tool would renumber every page.
+        $sort = $this->arg($arguments, 'sort');
+        if ($sort !== null) {
+            $query->sortby($this->sortColumn($modx, (string) $sort), $this->sortDirection($arguments));
+        } else {
+            $query->sortby('menuindex', 'ASC');
+            $query->sortby('id', 'ASC');
+        }
         $query->limit($limit, $offset);
 
         $rows = [];
@@ -84,5 +109,37 @@ final class ResourceListTool extends AbstractTool
             'returned'  => count($rows),
             'resources' => $rows,
         ];
+    }
+
+    /**
+     * Validate a sort column against the class's own field map.
+     *
+     * A column name cannot be bound as a query parameter, so it reaches the SQL
+     * as structure. Checking it against getFieldMeta is the same discipline
+     * ObjectListTool applies to its sort, and for the same reason.
+     *
+     * @throws McpException
+     */
+    private function sortColumn(modX $modx, string $sort): string
+    {
+        $fields = array_keys((array) $modx->getFieldMeta(modResource::class));
+        foreach ($fields as $field) {
+            if (strcasecmp($field, $sort) === 0) {
+                return $field;
+            }
+        }
+
+        sort($fields);
+        throw McpException::invalidParams(sprintf(
+            "'%s' is not a column of a resource. Sortable columns are: %s.",
+            $sort,
+            implode(', ', $fields)
+        ));
+    }
+
+    /** @param array<string,mixed> $arguments */
+    private function sortDirection(array $arguments): string
+    {
+        return strtoupper((string) $this->arg($arguments, 'dir', 'ASC')) === 'DESC' ? 'DESC' : 'ASC';
     }
 }
