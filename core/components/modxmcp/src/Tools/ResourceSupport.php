@@ -20,6 +20,7 @@ use MODXMCP\Protocol\McpException;
 trait ResourceSupport
 {
     use ResourceClassSupport;
+    use CollectionsSupport;
     use TemplateVarSupport;
     use PublishDateSupport;
 
@@ -71,34 +72,19 @@ trait ResourceSupport
      */
     protected function parentWarnings(modX $modx, int $parentId, ?int $showInTree): array
     {
-        if ($parentId <= 0) {
+        if ($parentId <= 0 || $showInTree === 0) {
             return [];
         }
-        if (!$modx->getObject(\MODX\Revolution\modNamespace::class, ['name' => 'collections'])) {
-            return [];
-        }
-
-        /** @var modResource|null $parent */
-        $parent = $modx->getObject(modResource::class, $parentId);
-        if (!$parent) {
+        if (!$this->collectionsInstalled($modx) || !$this->isCollectionsContainer($modx, $parentId)) {
             return [];
         }
 
-        // A Collections container advertises itself through its class_key.
-        if (stripos((string) $parent->get('class_key'), 'Collection') === false) {
-            return [];
-        }
-
-        if ($showInTree === 0) {
-            return [];
-        }
-
-        return [
-            "Parent {$parentId} is a Collections container. Children normally need "
-            . 'show_in_tree=0 and an explicit menuindex, or they will not appear in the '
-            . 'Collections grid. Pass show_in_tree=0 unless you specifically want this '
-            . 'resource in the tree.',
-        ];
+        return [sprintf(
+            'Parent %d is a Collections container. %s Pass show_in_tree=0 unless you '
+            . 'specifically want this resource in the tree.',
+            $parentId,
+            $this->collectionsChildRule()
+        )];
     }
 
     /** @return string[] */

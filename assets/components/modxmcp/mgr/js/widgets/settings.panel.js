@@ -37,6 +37,9 @@ MODxMCP.panel.Settings = function (config) {
                 { xtype: 'textfield', fieldLabel: _('modxmcp.set.trusted_proxy_header'),
                   id: 'modxmcp-set-trusted_proxy_header', anchor: '60%' },
                 desc('modxmcp.set.trusted_proxy_header_desc')
+                { xtype: 'textarea', fieldLabel: _('modxmcp.set.site_notes'),
+                    id: 'modxmcp-set-site_notes', anchor: '100%', height: 90 },
+                desc('modxmcp.set.site_notes_desc'),
             ]
         }, {
             xtype: 'fieldset',
@@ -62,6 +65,7 @@ Ext.extend(MODxMCP.panel.Settings, Ext.FormPanel);
 Ext.reg('modxmcp-panel-settings', MODxMCP.panel.Settings);
 
 MODxMCP.SETTING_KEYS = [
+    'site_notes',
     'enabled', 'log_arguments', 'audit_retention_days', 'discovery_cache_seconds',
     'trusted_proxy_header', 'read_class_allowlist', 'write_class_allowlist'
 ];

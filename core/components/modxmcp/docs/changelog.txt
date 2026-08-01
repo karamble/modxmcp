@@ -212,6 +212,38 @@ Additions
   resource using that template, and nothing else in the tool surface exposed the
   relationship.
 
+- site_info reports advisories: conditions this site actually exhibits, with the
+  evidence and a machine-checkable rule, rather than fixed prose keyed on an
+  extra being installed.
+
+  The old warnings fired whenever a namespace was present. Collections installed
+  with no containers still produced the show_in_tree warning, which is noise on
+  the first call of every session, and noise trains a reader to skim the block
+  that also carries the real blockers. Probes now detect, and stay silent when
+  there is nothing to say.
+
+  Five ship: Collections children (only when containers exist, carrying their
+  real ids so a caller can test its own pending parent against them), SeoSuite
+  sitemap orphans (an audit, emitted even at zero so "checked and clean" is
+  distinguishable from "not installed"), reserved TV names (derived from the
+  resource column set rather than a hardcoded list, and stating explicitly that
+  modxmcp's own TV reads and writes are unaffected), package updates, and cache
+  invalidation. A probe that throws costs its own advisory and nothing else.
+
+  warnings stays a string[] carrying every summary, so existing callers are
+  unaffected. Third-party extras can contribute their own through the new
+  OnMCPCollectAdvisories event.
+
+- modxmcp.site_notes, a system setting surfaced by site_info. Free text for local
+  convention nothing can detect: which parent new articles go under, whether
+  publishing is live immediately. Capped at 8 KB, because it rides on the first
+  call of every connection, and never parsed.
+
+- The Collections predicate had grown in four places in three shapes: a stripos()
+  on a parent's class_key, a stripos() on the resource's own, a class_key:LIKE
+  query fragment, and prose. All four now come from one trait, which also holds
+  the canonical wording of the rule.
+
 - modxmcp_resource_duplicate. Copies a resource and then re-saves the copy
   through the normal update path.
 

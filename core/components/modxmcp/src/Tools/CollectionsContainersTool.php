@@ -18,6 +18,7 @@ use MODXMCP\Registry\Schema;
  */
 final class CollectionsContainersTool extends AbstractTool
 {
+    use CollectionsSupport;
     public function name(): string
     {
         return 'modxmcp_collections_containers';
@@ -40,31 +41,15 @@ final class CollectionsContainersTool extends AbstractTool
 
     public function call(modX $modx, array $arguments): array
     {
-        $query = $modx->newQuery(modResource::class);
-        $query->where(['deleted' => 0, 'class_key:LIKE' => '%Collection%']);
-        if (($context = $this->arg($arguments, 'context')) !== null) {
-            $query->where(['context_key' => (string) $context]);
-        }
-        $query->sortby('id', 'ASC');
-
-        $containers = [];
-        foreach ($modx->getCollection(modResource::class, $query) as $resource) {
-            $id = (int) $resource->get('id');
-            $containers[] = [
-                'id'          => $id,
-                'pagetitle'   => $resource->get('pagetitle'),
-                'uri'         => $resource->get('uri'),
-                'class_key'   => $resource->get('class_key'),
-                'context_key' => $resource->get('context_key'),
-                'child_count' => $modx->getCount(modResource::class, ['parent' => $id, 'deleted' => 0]),
-            ];
-        }
+        // The listing, the predicate and the rule wording all live in
+        // CollectionsSupport, so this tool and the resource warnings cannot
+        // drift apart on what counts as a container.
+        $containers = $this->collectionsContainers($modx, $this->arg($arguments, 'context'));
 
         return [
             'containers' => $containers,
             'count'      => count($containers),
-            'rule'       => 'When creating a resource whose parent is one of these, pass '
-                . 'show_in_tree=false and an explicit menuindex to modxmcp_resource_create.',
+            'rule'       => $this->collectionsChildRule(),
         ];
     }
 }

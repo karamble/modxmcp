@@ -171,7 +171,7 @@ trait ResourceClassSupport
             );
         }
 
-        if (stripos($classKey, 'Collection') !== false) {
+        if ($this->isCollectionsClassKey($classKey)) {
             $warnings[] = 'This class_key makes the resource a Collections container. '
                 . 'Collections keeps its grid configuration outside the resource row, so the '
                 . 'container can show an empty grid until a view is configured for it in the '

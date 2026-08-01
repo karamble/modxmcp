@@ -52,6 +52,16 @@ $entries = [
         'xtype' => 'textfield',
         'area'  => 'modxmcp.main',
     ],
+    'modxmcp.site_notes' => [
+        // Free-text local convention for whoever connects: which parent new
+        // articles go under, that deploys are live immediately, anything the
+        // operator would otherwise repeat every session. Surfaced by site_info
+        // and capped there, because it rides on the first call of every
+        // connection.
+        'value' => '',
+        'xtype' => 'textarea',
+        'area'  => 'modxmcp.main',
+    ],
     'modxmcp.read_class_allowlist' => [
         'value' => '',
         'xtype' => 'textarea',

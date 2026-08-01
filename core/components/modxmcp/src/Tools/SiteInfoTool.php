@@ -6,6 +6,7 @@ use MODX\Revolution\modContext;
 use MODX\Revolution\modNamespace;
 use MODX\Revolution\modTemplate;
 use MODX\Revolution\modX;
+use MODXMCP\Knowledge\AdvisoryCollector;
 use MODXMCP\Registry\ToolInterface;
 
 /**
@@ -19,22 +20,24 @@ use MODXMCP\Registry\ToolInterface;
 final class SiteInfoTool implements ToolInterface
 {
     /**
-     * Extra-specific rules that break content when ignored. Keyed by namespace.
+     * Rules that depend only on an extra being present, with nothing to detect.
+     *
+     * The conditional ones moved to MODXMCP\Knowledge probes, which report what
+     * this site actually exhibits rather than what it could. These two stayed
+     * because they are properties of the extra itself: MIGX TVs store JSON
+     * wherever they appear, and Tagger's tags are relations however they are
+     * written. There is no site state that makes either untrue.
      */
     private const WARNINGS = [
-        'collections' => 'Collections is installed. Resources created under a Collections '
-            . 'container MUST have show_in_tree=0 and a real menuindex, otherwise they '
-            . 'vanish from listings even though they exist and are published.',
-        'seosuite' => 'SeoSuite is installed. It inner-joins its own tables, so a resource '
-            . 'written outside the Manager save path is silently absent from sitemap.xml. '
-            . 'Always use the processor-backed resource tools, never raw object writes. '
-            . 'Changing an alias also needs a redirect row, which is not created automatically.',
         'migx' => 'MIGX is installed. MIGX template variables store JSON, and their structure '
             . 'is defined by a MIGX config rather than by any database schema. Read the TV '
             . 'input properties before writing a MIGX TV value.',
         'tagger' => 'Tagger is installed. Tags are relations, not a plain field: writing a '
             . 'tag TV value directly will not register the tag with Tagger.',
     ];
+
+    /** Operator prose, capped so it cannot dominate every session's first call. */
+    private const NOTES_LIMIT = 8192;
 
     public function name(): string
     {
@@ -57,7 +60,15 @@ final class SiteInfoTool implements ToolInterface
                 . 'warnings describe rules that are not discoverable from any schema.',
             'inputSchema' => [
                 'type'       => 'object',
-                'properties' => new \stdClass(),
+                'properties' => [
+                    'refresh' => [
+                        'type'        => 'boolean',
+                        'description' => 'Recompute the advisories instead of reading the '
+                            . 'cached result. Rarely needed; they are cached because one of '
+                            . 'them counts across every published resource.',
+                        'default'     => false,
+                    ],
+                ],
                 'required'   => [],
             ],
         ];
@@ -87,7 +98,13 @@ final class SiteInfoTool implements ToolInterface
         }
         sort($extras);
 
-        $warnings = [];
+        $collector  = new AdvisoryCollector($modx);
+        $advisories = $collector->collect(!empty($arguments['refresh']));
+
+        // warnings stays a string[] and keeps carrying everything, because it is
+        // the shape existing callers read. advisories is the machine-usable form
+        // and goes alongside rather than replacing it.
+        $warnings = $collector->summaries($advisories);
         foreach (self::WARNINGS as $namespace => $warning) {
             if (in_array($namespace, $extras, true)) {
                 $warnings[] = $warning;
@@ -105,6 +122,8 @@ final class SiteInfoTool implements ToolInterface
             'extras'       => $extras,
             'extras_count' => count($extras),
             'warnings'     => $warnings,
+            'advisories'   => $advisories,
+            'notes'        => $this->operatorNotes($modx),
             'bound_user'   => $modx->user ? $modx->user->get('username') : null,
             // Proof, on every call, that the session-free contract still holds.
             //
@@ -119,6 +138,38 @@ final class SiteInfoTool implements ToolInterface
                 'php_sid'    => session_id(),
                 'modx_state' => $modx->getSessionState(),
             ],
+        ];
+    }
+
+    /**
+     * Free-text notes the site's operator left for whoever connects.
+     *
+     * Local convention that nothing can be detected from: which parent new
+     * articles go under, that deploys are live immediately, whatever the person
+     * running the site would otherwise have to repeat every session.
+     *
+     * Capped, because this is on the first call of every connection and an
+     * operator pasting a wiki page into it would tax every session's context
+     * with nobody noticing why. Not parsed: prose stays prose, and the path for
+     * machine-readable rules is OnMCPCollectAdvisories.
+     *
+     * @return array<string,mixed>|null
+     */
+    private function operatorNotes(modX $modx): ?array
+    {
+        $raw = trim((string) $modx->getOption('modxmcp.site_notes', null, ''));
+        if ($raw === '') {
+            return null;
+        }
+
+        $truncated = strlen($raw) > self::NOTES_LIMIT;
+
+        return [
+            'text'      => $truncated ? substr($raw, 0, self::NOTES_LIMIT) : $raw,
+            'truncated' => $truncated,
+            'source'    => 'system setting modxmcp.site_notes',
+            'guidance'  => 'Written by this site\'s operator. Authoritative about local '
+                . 'convention, but prose rather than a machine-checkable rule.',
         ];
     }
 }

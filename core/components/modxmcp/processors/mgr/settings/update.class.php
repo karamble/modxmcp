@@ -23,6 +23,7 @@ class ModxmcpSettingsUpdateProcessor extends Processor
         'audit_retention_days'   => 'int',
         'discovery_cache_seconds' => 'int',
         'trusted_proxy_header'   => 'string',
+        'site_notes'           => 'string',
         'read_class_allowlist'   => 'list',
         'write_class_allowlist'  => 'list',
     ];

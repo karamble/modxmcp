@@ -24,6 +24,7 @@ class ModxmcpSettingsGetProcessor extends Processor
         'modxmcp.audit_retention_days',
         'modxmcp.discovery_cache_seconds',
         'modxmcp.trusted_proxy_header',
+        'modxmcp.site_notes',
         'modxmcp.read_class_allowlist',
         'modxmcp.write_class_allowlist',
     ];
