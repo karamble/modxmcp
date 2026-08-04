@@ -41,6 +41,9 @@ $_lang['modxmcp.audit.ip']            = 'IP';
 $_lang['modxmcp.audit.duration']      = 'ms';
 $_lang['modxmcp.audit.ok']            = 'ok';
 $_lang['modxmcp.audit.failed']        = 'failed';
+$_lang['modxmcp.audit.clear']         = 'Clear log';
+$_lang['modxmcp.audit.clear_confirm'] = 'Delete every audit log entry? This ignores the current filters, cannot be undone, and removes the record of what each token has done.';
+$_lang['modxmcp.audit.cleared']       = 'Audit log cleared.';
 
 // Status
 $_lang['modxmcp.disabled_warning']    = 'modxmcp is disabled. Set the modxmcp.enabled system setting to Yes to accept requests.';

@@ -47,6 +47,22 @@ MODxMCP.grid.Audit = function (config) {
                     g.getBottomToolbar().changePage(1);
                 }
             }
+        }, {
+            text: _('modxmcp.audit.clear'),
+            handler: function () {
+                MODx.msg.confirm({
+                    title: _('modxmcp.audit.clear'),
+                    text: _('modxmcp.audit.clear_confirm'),
+                    url: MODxMCP.connector(),
+                    params: { action: 'mgr/audit/clear' },
+                    listeners: { success: { fn: function () {
+                        MODx.msg.status({ title: _('success'), message: _('modxmcp.audit.cleared'), delay: 2 });
+                        var g = Ext.getCmp('modxmcp-grid-audit');
+                        if (g) { g.getBottomToolbar().changePage(1); }
+                        MODxMCP.loadSettings();
+                    } } }
+                });
+            }
         }, '->', {
             xtype: 'textfield',
             emptyText: _('search') + '...',
