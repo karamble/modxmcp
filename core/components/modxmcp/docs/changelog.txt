@@ -453,3 +453,14 @@ First stable release. Everything below is in addition to the beta5 entry.
 - The audit log now redacts content_base64 before storing arguments, so an
   upload with log_arguments enabled records who wrote which path, never a
   payload dump.
+
+1.0.1-pl
+========
+Manager fixes.
+
+- The settings Save button was rendered in the panel footer, which the
+  autoHeight tab clips out of frame. Save now appears twice: in a top
+  toolbar like the other tabs, and in-flow after the last fieldset.
+- New Clear log button on the audit grid, behind a confirmation. It
+  deletes every row regardless of the grid's current filters, and writes
+  who cleared the log and how many rows to the MODX system log.

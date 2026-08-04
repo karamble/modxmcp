@@ -16,7 +16,7 @@ use MODX\Revolution\Transport\modPackageBuilder;
 use xPDO\Transport\xPDOTransport;
 
 const PKG_NAME    = 'modxmcp';
-const PKG_VERSION = '1.0.0';
+const PKG_VERSION = '1.0.1';
 const PKG_RELEASE = 'pl';
 
 $root = dirname(__DIR__) . '/';
