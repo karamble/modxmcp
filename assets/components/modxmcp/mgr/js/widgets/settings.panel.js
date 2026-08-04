@@ -13,11 +13,24 @@ MODxMCP.panel.Settings = function (config) {
         return { xtype: 'displayfield', value: _(key), cls: 'desc-under' };
     };
 
+    var saveButton = function () {
+        return {
+            xtype: 'button',
+            text: _('modxmcp.settings.save'),
+            cls: 'primary-button',
+            handler: function () { MODxMCP.saveSettings(); }
+        };
+    };
+
+    // Save appears twice: in the toolbar and again at the end of the form.
+    // The panel footer (buttons:) is not usable here — nested in the
+    // autoHeight tab it renders below the tab body, out of frame.
     Ext.applyIf(config, {
         id: 'modxmcp-settings-panel',
         bodyStyle: 'padding:14px',
         border: false,
         labelAlign: 'top',
+        tbar: ['->', saveButton()],
         items: [{
             xtype: 'fieldset',
             title: _('modxmcp.settings.general'),
@@ -69,12 +82,7 @@ MODxMCP.panel.Settings = function (config) {
                   id: 'modxmcp-set-write_class_allowlist', anchor: '100%', height: 60 },
                 desc('modxmcp.set.write_class_allowlist_desc')
             ]
-        }],
-        buttons: [{
-            text: _('modxmcp.settings.save'),
-            cls: 'primary-button',
-            handler: function () { MODxMCP.saveSettings(); }
-        }]
+        }, Ext.apply(saveButton(), { style: 'margin-top:4px' })]
     });
     MODxMCP.panel.Settings.superclass.constructor.call(this, config);
 };
