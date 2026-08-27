@@ -57,6 +57,19 @@ final class V20251125 implements ProtocolInterface
         return $request->protocolVersion() === null;
     }
 
+    /**
+     * Results in this era are whatever the method returns. `resultType` arrives
+     * with 2026-07-28; stamping it here would put a field on the wire that this
+     * revision does not define.
+     *
+     * @param array<string,mixed>|\stdClass $result
+     * @return array<string,mixed>|\stdClass
+     */
+    public function finalizeResult(Request $request, $result)
+    {
+        return $result;
+    }
+
     public function validate(Request $request, HttpTransport $transport): void
     {
         // This era mirrors nothing into headers, so there is no header/body

@@ -14,6 +14,48 @@ final class V20260728 implements ProtocolInterface
 {
     public const VERSION = '2026-07-28';
 
+    /** The `resultType` of an ordinary, finished result. */
+    public const RESULT_COMPLETE = 'complete';
+
+    /**
+     * How long a client may consider a cacheable result fresh.
+     *
+     * The tool set changes only when an extra is installed or removed, or when
+     * a plugin answering OnMCPRegisterTools changes. modxmcp does not advertise
+     * listChanged, so this TTL is the client's only freshness signal: too long
+     * and a newly installed extra stays invisible until it expires. Five
+     * minutes is the specification's own example, and short enough that
+     * installing an extra and seeing its tools is not a wait worth noticing.
+     */
+    public const CACHE_TTL_MS = 300000;
+
+    /**
+     * `private` rather than `public`, though definitions() currently ignores
+     * the caller's scopes and so returns an identical list to every token.
+     *
+     * `public` licenses any shared proxy to serve one caller's tool list to
+     * another, across authorization contexts. The specification permits a
+     * server to filter the list by granted scopes, which is a natural thing for
+     * this extra to grow; the day it does, `public` becomes a cross-token leak
+     * with nothing at the call site to catch it. `private` costs one extra
+     * tools/list per token and cannot fail that way.
+     */
+    public const CACHE_SCOPE = 'private';
+
+    /**
+     * Operations whose complete results MUST carry caching hints.
+     *
+     * @var array<string,true>
+     */
+    private const CACHEABLE = [
+        'server/discover'          => true,
+        'tools/list'               => true,
+        'prompts/list'             => true,
+        'resources/list'           => true,
+        'resources/templates/list' => true,
+        'resources/read'           => true,
+    ];
+
     /**
      * Methods whose name is mirrored into the Mcp-Name header, and the body
      * field it must equal.
@@ -33,6 +75,71 @@ final class V20260728 implements ProtocolInterface
     public function supportedVersions(): array
     {
         return [self::VERSION];
+    }
+
+    /**
+     * Every result in this revision carries `resultType`, and a client is
+     * entitled to reject one that does not: absence means "complete" only for
+     * earlier revisions, so the older reading is not available to us.
+     *
+     * "complete" is the ordinary case. The other value, "input_required",
+     * belongs to multi round-trip requests, which modxmcp does not implement --
+     * but a result that already names its own type is left alone, so adding
+     * them later needs no change here.
+     *
+     * Complete results of the listing operations additionally MUST carry
+     * caching hints; interim results carry none.
+     *
+     * @param array<string,mixed>|\stdClass $result
+     * @return array<string,mixed>|\stdClass
+     */
+    public function finalizeResult(Request $request, $result)
+    {
+        if ($result instanceof \stdClass) {
+            if (!isset($result->resultType)) {
+                $result->resultType = self::RESULT_COMPLETE;
+            }
+
+            return $result;
+        }
+
+        if (!is_array($result)) {
+            return $result;
+        }
+
+        if (!array_key_exists('resultType', $result)) {
+            // Prepended rather than appended: the specification's examples lead
+            // with it, and a human reading the wire should see it first.
+            $result = array_merge(['resultType' => self::RESULT_COMPLETE], $result);
+        }
+
+        return $this->withCachingHints($request, $result);
+    }
+
+    /**
+     * Caching hints, on the operations that require them.
+     *
+     * modxmcp never paginates -- every list it can produce is small enough to
+     * send whole -- so there is no nextCursor to add here, and each result is
+     * a single page cached as itself.
+     *
+     * @param array<string,mixed> $result
+     * @return array<string,mixed>
+     */
+    private function withCachingHints(Request $request, array $result): array
+    {
+        if (!isset(self::CACHEABLE[$request->method()])) {
+            return $result;
+        }
+
+        if (($result['resultType'] ?? null) !== self::RESULT_COMPLETE) {
+            return $result;
+        }
+
+        $result['ttlMs']      = $result['ttlMs'] ?? self::CACHE_TTL_MS;
+        $result['cacheScope'] = $result['cacheScope'] ?? self::CACHE_SCOPE;
+
+        return $result;
     }
 
     public function validate(Request $request, HttpTransport $transport): void

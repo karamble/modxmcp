@@ -29,4 +29,12 @@ interface ProtocolInterface
      * @throws McpException when the request must be rejected
      */
     public function validate(Request $request, HttpTransport $transport): void;
+
+    /**
+     * Stamp whatever this revision requires onto an outgoing result envelope.
+     *
+     * @param array<string,mixed>|\stdClass $result
+     * @return array<string,mixed>|\stdClass
+     */
+    public function finalizeResult(Request $request, $result);
 }

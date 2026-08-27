@@ -28,7 +28,7 @@ use MODXMCP\Registry\ToolRegistry;
 final class Server
 {
     public const NAME    = 'modxmcp';
-    public const VERSION = '1.0.1';
+    public const VERSION = '1.0.2';
 
     private modX $modx;
     private HttpTransport $transport;
@@ -102,7 +102,7 @@ final class Server
             }
 
             $result = $this->dispatch($request, $token, $protocol);
-            $this->transport->emitResult($id, $result);
+            $this->transport->emitResult($id, $protocol->finalizeResult($request, $result));
             $this->record($request, $token, true, null, $startedAt);
         } catch (McpException $e) {
             $this->transport->emitException($e, $id);
