@@ -464,3 +464,31 @@ Manager fixes.
 - New Clear log button on the audit grid, behind a confirmation. It
   deletes every row regardless of the grid's current filters, and writes
   who cleared the log and how many rows to the MODX system log.
+
+1.0.2-pl
+========
+Protocol conformance under revision 2026-07-28.
+
+- Results served under 2026-07-28 carry `resultType`. The revision requires
+  it on every result and a client is entitled to refuse one without it:
+  absence means "complete" only for earlier revisions. Claude Code rejected
+  every tools/list, so no tools registered at all on any deployed site
+  while the endpoint otherwise looked healthy. tools/call was wrong the
+  same way and would have failed the moment a tool was invoked.
+- Complete results of server/discover, tools/list, prompts/list,
+  resources/list and resources/templates/list carry the caching hints
+  `ttlMs` and `cacheScope`, which that revision also requires. Five
+  minutes, and `private` rather than `public`: the tool list is identical
+  for every token today, but the specification permits filtering it by
+  granted scopes, and `public` would license a shared proxy to serve one
+  caller's list to another the day it is.
+- Both are stamped by the protocol revision rather than by each handler,
+  so a result cannot reach the wire without them. Results served to
+  initialization-based clients are untouched: neither field exists before
+  2026-07-28.
+
+Nothing changed in the legacy path, in tool behaviour, or in any site's
+data. The upgrade rewrites files only; its resolvers are idempotent, and
+existing system settings, tokens, the audit log and the endpoint resource
+are all preserved.
+
