@@ -64,13 +64,33 @@ final class ElementDeleteTool extends AbstractTool
             throw McpException::invalidParams("No {$typeKey} matching the given id or name");
         }
 
-        $row     = $element->toArray();
-        $removed = $this->normaliseElement($row, $type, true);
+        $elementId = (int) $element->get('id');
+        $row       = $element->toArray();
+        $removed   = $this->normaliseElement($row, $type, true);
+
+        // Everything needed to rebuild the element, gathered before the
+        // processor runs and takes it away.
+        //
+        // The class docblock promises the removal is "at least recoverable from
+        // the transcript", and the body alone does not deliver that: a snippet
+        // or plugin without its default properties, or a TV without its caption,
+        // option list and input configuration, comes back as something other
+        // than what was deleted.
+        //
+        // A plugin's event bindings live in their own table and are gone the
+        // moment Remove succeeds, so they are read here rather than after.
+        // A TV's template attachments deliberately are not: MODX refuses to
+        // remove a TV that any template still declares, so by the time this
+        // line is reached the list is necessarily empty.
+        $removed += $this->replacedFields($element, $type, $typeKey);
+        if ($typeKey === 'plugin') {
+            $removed['events'] = array_column($this->pluginEvents($modx, $elementId), 'name');
+        }
 
         $warnings = [];
         if ($typeKey === 'template') {
             $inUse = $modx->getCount(\MODX\Revolution\modResource::class, [
-                'template' => (int) $element->get('id'),
+                'template' => $elementId,
                 'deleted'  => 0,
             ]);
             if ($inUse > 0) {
@@ -79,7 +99,7 @@ final class ElementDeleteTool extends AbstractTool
             }
         }
 
-        $this->runProcessor($modx, $type['processor'] . '/Remove', ['id' => (int) $element->get('id')]);
+        $this->runProcessor($modx, $type['processor'] . '/Remove', ['id' => $elementId]);
 
         $out = [
             'type'        => $typeKey,

@@ -152,6 +152,74 @@ trait ElementSupport
     }
 
     /**
+     * The fields element_save replaces wholesale rather than merging.
+     *
+     * Kept out of normaliseElement() on purpose: element_list shares that one
+     * and has to stay cheap. Two callers need these, for the same underlying
+     * reason — a caller told to "send every option you want to keep" has to be
+     * able to see what is there.
+     *
+     *   element_get    so a read-modify-write cycle does not destroy the set
+     *   element_delete so the echo of a permanent deletion is actually enough
+     *                  to rebuild what was removed
+     *
+     * @param mixed $element
+     * @param array<string,mixed> $type
+     * @return array<string,mixed>
+     */
+    protected function replacedFields($element, array $type, string $typeKey): array
+    {
+        $out = [];
+
+        if (!empty($type['properties'])) {
+            // Re-emitted as the list element_save accepts, not the map the
+            // column stores, so neither caller has to reshape it.
+            $out['properties'] = array_values($this->storedArray($element->get('properties')));
+        }
+
+        if ($typeKey === 'tv') {
+            $out['caption']           = (string) $element->get('caption');
+            $out['display']           = (string) $element->get('display');
+            $out['elements']          = (string) $element->get('elements');
+            $out['rank']              = (int) $element->get('rank');
+            $out['input_properties']  = $this->storedArray($element->get('input_properties'));
+            $out['output_properties'] = $this->storedArray($element->get('output_properties'));
+        }
+
+        return $out;
+    }
+
+    /**
+     * Normalise one of xPDO's serialised blob columns to an array.
+     *
+     * Whether the array or the raw string comes back depends on how the field
+     * is declared in the model, and that is not consistent across the element
+     * classes, so both are handled rather than betting on one. Objects are
+     * refused during unserialisation: this data is written by the Manager and
+     * by this extra, but it is still a blob from a database column.
+     *
+     * @param mixed $value
+     * @return array<mixed>
+     */
+    protected function storedArray($value): array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+        if (!is_string($value) || $value === '') {
+            return [];
+        }
+
+        $decoded = @unserialize($value, ['allowed_classes' => false]);
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+
+        $json = json_decode($value, true);
+        return is_array($json) ? $json : [];
+    }
+
+    /**
      * Describe an element by re-reading it after a write.
      *
      * The same argument ResourceSupport::summarise() makes for resources, which
