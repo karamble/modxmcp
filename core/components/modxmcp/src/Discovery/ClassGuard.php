@@ -24,7 +24,8 @@ final class ClassGuard
      *
      * Credentials and session identifiers mean account takeover; the access
      * classes mean privilege escalation; modxmcp's own tables would let a token
-     * widen its own scope or erase the record of having done so.
+     * widen its own scope or erase the record of having done so; and a media
+     * source holds the credentials of the remote store behind it.
      */
     // Case-insensitive by design. PHP class names are case-insensitive, so
     // "modx\revolution\moduser" resolves to the same class as
@@ -47,6 +48,38 @@ final class ClassGuard
         '/^MODX\\\\Revolution\\\\modSystemSetting$/i',
         '/^MODX\\\\Revolution\\\\modContextSetting$/i',
         '/^MODX\\\\Revolution\\\\modDashboardWidget$/i',
+
+        // Media sources, for the same reason as the settings above and by
+        // the same mechanism. A remote source keeps its credentials -- an S3
+        // key and secret, an FTP password -- inside the serialised `properties`
+        // blob: once again the secret sits in one generic column whose name
+        // says nothing about what is in it, and redact() matches field names,
+        // so it cannot see inside a column.
+        //
+        // Writing is worse than reading. basePath decides where every upload
+        // lands, and modxmcp.upload_path_allowlist is checked against the path
+        // within the source rather than against the filesystem. Rewrite an
+        // allowlisted source's basePath and file_upload writes wherever that
+        // now points, with the allowlist still satisfied.
+        //
+        // Neither anchored nor spelled modMediaSource: in MODX 3 these live in
+        // MODX\Revolution\Sources\, and that namespace holds the concrete file
+        // and S3 backends beside the base class. A pattern naming the base
+        // class alone would match nothing at all.
+        '/^MODX\\\\Revolution\\\\Sources\\\\/i',
+    ];
+
+    /**
+     * Base types whose descendants are equally unreachable.
+     *
+     * The lesson WRITE_BLOCKED_DESCENDANTS_OF already records, applied to the
+     * other list: a name list only covers the classes somebody thought to write
+     * down. Every extra that adds a storage backend subclasses modMediaSource
+     * and keeps its own credentials in the same properties blob, under a class
+     * name in its own namespace that nothing here can predict.
+     */
+    private const HARD_BLOCKED_DESCENDANTS_OF = [
+        \MODX\Revolution\Sources\modMediaSource::class,
     ];
 
     /**
@@ -112,6 +145,18 @@ final class ClassGuard
 
     private modX $modx;
 
+    /**
+     * isHardBlocked() answers, keyed by lowercased class name.
+     *
+     * schema_list asks three times per class -- directly, then again through
+     * canRead() and canWrite() -- and now that discovery reaches the core, that
+     * loop runs over a hundred classes rather than two. Worth memoising once
+     * the answer can involve walking an ancestry.
+     *
+     * @var array<string,bool>
+     */
+    private array $hardBlocked = [];
+
     public function __construct(modX $modx)
     {
         $this->modx = $modx;
@@ -119,12 +164,18 @@ final class ClassGuard
 
     public function isHardBlocked(string $class): bool
     {
+        $key = strtolower($class);
+        if (isset($this->hardBlocked[$key])) {
+            return $this->hardBlocked[$key];
+        }
+
         foreach (self::HARD_BLOCKED as $pattern) {
             if (preg_match($pattern, $class)) {
-                return true;
+                return $this->hardBlocked[$key] = true;
             }
         }
-        return false;
+
+        return $this->hardBlocked[$key] = $this->descendsFrom($class, self::HARD_BLOCKED_DESCENDANTS_OF);
     }
 
     public function canRead(string $class): bool
@@ -148,11 +199,16 @@ final class ClassGuard
             }
         }
 
-        return $this->descendsFromWriteBlocked($class);
+        return $this->descendsFrom($class, self::WRITE_BLOCKED_DESCENDANTS_OF);
     }
 
     /**
-     * Does this class inherit from a type that has a dedicated tool?
+     * Does this class descend from one of the given base types?
+     *
+     * Shared by both block lists: for writes it asks whether a dedicated
+     * processor-backed tool owns the class, and for the hard block whether the
+     * class is a storage backend wearing a name nobody here could have
+     * predicted. The test is the same one either way.
      *
      * Two lookups because neither alone is sufficient. is_a() with the
      * string form covers anything the autoloader can reach, which is every core
@@ -160,10 +216,12 @@ final class ClassGuard
      * classes an extra registers with addPackage and a plain autoloader may not
      * see. A class this guard cannot resolve at all falls through to the
      * allowlist, which is opt-in and therefore closed by default.
+     *
+     * @param string[] $bases
      */
-    private function descendsFromWriteBlocked(string $class): bool
+    private function descendsFrom(string $class, array $bases): bool
     {
-        foreach (self::WRITE_BLOCKED_DESCENDANTS_OF as $base) {
+        foreach ($bases as $base) {
             if (is_a($class, $base, true)) {
                 return true;
             }
@@ -175,7 +233,7 @@ final class ClassGuard
         }
 
         foreach ($ancestry as $ancestor) {
-            foreach (self::WRITE_BLOCKED_DESCENDANTS_OF as $base) {
+            foreach ($bases as $base) {
                 if (strcasecmp((string) $ancestor, $base) === 0) {
                     return true;
                 }
@@ -195,8 +253,9 @@ final class ClassGuard
     {
         if ($this->isHardBlocked($class)) {
             return "Access to {$class} is permanently blocked by modxmcp. It holds credentials, "
-                . 'session data, access-control rules, system settings, or modxmcp\'s own tokens '
-                . 'and audit trail. No setting can enable it.';
+                . 'session data, access-control rules, system settings, media source '
+                . 'configuration, or modxmcp\'s own tokens and audit trail. No setting can '
+                . 'enable it.';
         }
 
         if ($operation === 'write' && $this->isWriteBlocked($class)) {

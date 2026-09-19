@@ -112,7 +112,7 @@ Beyond resources and elements, modxmcp can discover and read the data of any ins
 
 Reading or writing actual rows is opt-in per class, via `modxmcp.read_class_allowlist` and `modxmcp.write_class_allowlist`. Both are empty by default, and this is deliberate: xPDO has no permission model, so unlike the resource and element tools there is no MODX permission check behind generic access. Those settings are the only control.
 
-Some classes can never be reached, whatever the settings say: users, sessions, access-control rules, and modxmcp's own tokens and audit log. Fields that look like secrets are masked on read.
+Some classes can never be reached, whatever the settings say: users, sessions, access-control rules, system settings, media sources, and modxmcp's own tokens and audit log. Fields that look like secrets are masked on read.
 
 ## Security notes
 
