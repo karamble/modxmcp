@@ -30,15 +30,15 @@ final class V20260728 implements ProtocolInterface
     public const CACHE_TTL_MS = 300000;
 
     /**
-     * `private` rather than `public`, though definitions() currently ignores
-     * the caller's scopes and so returns an identical list to every token.
+     * `private` rather than `public`, and now load-bearing rather than
+     * precautionary: tools/list is filtered by the calling token's scopes, so
+     * two tokens legitimately receive different lists.
      *
      * `public` licenses any shared proxy to serve one caller's tool list to
-     * another, across authorization contexts. The specification permits a
-     * server to filter the list by granted scopes, which is a natural thing for
-     * this extra to grow; the day it does, `public` becomes a cross-token leak
-     * with nothing at the call site to catch it. `private` costs one extra
-     * tools/list per token and cannot fail that way.
+     * another, across authorization contexts. That was a latent hazard while
+     * every token saw the same catalogue. Now that the list is per-token it is
+     * an actual cross-token leak, with nothing at the call site to catch it.
+     * `private` costs one extra tools/list per token and cannot fail that way.
      */
     public const CACHE_SCOPE = 'private';
 

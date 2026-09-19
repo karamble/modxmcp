@@ -26,11 +26,29 @@ final class ToolRegistry
         return isset($this->tools[$name]);
     }
 
-    /** @return array<int,array<string,mixed>> */
-    public function definitions(): array
+    /**
+     * The catalogue, narrowed to what the caller could actually invoke.
+     *
+     * Not the access control: call() enforces the same scopes and always did,
+     * and an unfiltered list was never a hole. It is that a model reasons about
+     * the catalogue it is shown. Offered every write tool, a read-only token
+     * will tell the user it is about to publish, try it, take the refusal, and
+     * spend a round trip learning what the list could have said.
+     *
+     * Passing null lists everything, for callers that want the documentation
+     * view rather than one token's view.
+     *
+     * @param string[]|null $grantedScopes
+     * @return array<int,array<string,mixed>>
+     */
+    public function definitions(?array $grantedScopes = null): array
     {
         $out = [];
         foreach ($this->tools as $tool) {
+            $need = $tool->requiredScope();
+            if ($grantedScopes !== null && $need !== '' && !in_array($need, $grantedScopes, true)) {
+                continue;
+            }
             $out[] = $tool->definition();
         }
         return $out;

@@ -144,7 +144,9 @@ final class Server
                 return new \stdClass();
 
             case 'tools/list':
-                return ['tools' => $this->tools->definitions()];
+                // Narrowed to this token's scopes, which is why
+                // V20260728::CACHE_SCOPE has to stay `private`.
+                return ['tools' => $this->tools->definitions($this->tokens->scopesOf($token))];
 
             case 'tools/call':
                 $args = $request->param('arguments', []);

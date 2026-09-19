@@ -93,12 +93,55 @@ final class SchemaListTool extends AbstractTool
             'shown'             => $totalShown,
             'readable'          => $readable,
             'hard_blocked'      => $blocked,
-            'note' => $readable === 0 && $totalShown > 0
-                ? 'No class is currently readable through generic object access. It is opt-in per '
-                  . 'class via the modxmcp.read_class_allowlist system setting, because xPDO has '
-                  . 'no permission model of its own. The dedicated resource and element tools '
-                  . 'work regardless.'
-                : null,
+            'note'              => $this->note(
+                $totalShown,
+                $readable,
+                $blocked,
+                $extra !== null || $search !== null || $only
+            ),
         ];
+    }
+
+    /**
+     * The one line telling a caller what to do about what it just got back.
+     *
+     * Gated on `$readable === 0 && $totalShown > 0` before, which dropped the
+     * note in the case that needs it most. When every discovered class is hard
+     * blocked nothing is shown, so the response was an unexplained
+     * {"shown":0,"readable":0,"hard_blocked":2,"note":null} with no way to tell
+     * "this site defines nothing" from "you may see none of it".
+     */
+    private function note(int $shown, int $readable, int $blocked, bool $filtered): ?string
+    {
+        if ($shown === 0 && $filtered) {
+            return 'Nothing matched. Drop the extra, search and accessible_only arguments to '
+                . 'see everything this site defines.';
+        }
+
+        if ($shown === 0 && $blocked > 0) {
+            return sprintf(
+                'Every one of the %d discovered class(es) is permanently blocked by modxmcp, '
+                . 'which is why the list is empty: they hold credentials, sessions, '
+                . 'access-control rules, system settings, media sources, or modxmcp\'s own '
+                . 'tables. No setting can enable them. This is not the same as the site '
+                . 'defining no data classes.',
+                $blocked
+            );
+        }
+
+        if ($shown === 0) {
+            return 'No model classes were discovered on this site. If extras are installed, '
+                . 'their namespaces may not be registered; clearing the MODX cache and '
+                . 'retrying is the usual fix.';
+        }
+
+        if ($readable === 0) {
+            return 'No class is currently readable through generic object access. It is opt-in '
+                . 'per class via the modxmcp.read_class_allowlist system setting, because xPDO '
+                . 'has no permission model of its own. The dedicated resource and element '
+                . 'tools work regardless.';
+        }
+
+        return null;
     }
 }

@@ -323,6 +323,46 @@ trait TemplateVarSupport
     }
 
     /**
+     * The TV values actually stored on a resource, keyed by name.
+     *
+     * "Stored" rather than "effective", and the distinction is the whole point:
+     * readTvsForTemplate() reports what the resource renders, which for an
+     * untouched TV is the template's default. Echoing that back after a copy
+     * would answer "what does this template define" when the caller asked
+     * "what came across", and on a template carrying thirty TVs it buries the
+     * two that did in twenty-eight nulls.
+     *
+     * Two queries rather than the one count per attached TV that
+     * readTvState() pays: that cost is why tv_state is opt-in, and a write path
+     * should not quietly take it on.
+     *
+     * @return array<string,mixed>
+     */
+    protected function storedTvs(modX $modx, int $resourceId, int $templateId): array
+    {
+        $names = [];
+        foreach ($this->attachedTvs($modx, $templateId) as $name => $tv) {
+            $names[(int) $tv->get('id')] = $name;
+        }
+        if ($names === []) {
+            return [];
+        }
+
+        $values = [];
+        foreach ($modx->getIterator(modTemplateVarResource::class, [
+            'contentid'    => $resourceId,
+            'tmplvarid:IN' => array_keys($names),
+        ]) as $row) {
+            $id = (int) $row->get('tmplvarid');
+            if (isset($names[$id])) {
+                $values[$names[$id]] = $row->get('value');
+            }
+        }
+
+        return $values;
+    }
+
+    /**
      * Unused rows are not an error worth reporting, so this stays quiet.
      *
      * Kept so callers that only need to know whether a value is stored at all

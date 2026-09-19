@@ -112,6 +112,22 @@ final class ResourceDuplicateTool extends AbstractTool
         $result = $this->summarise($modx, $newId);
         $result['duplicated_from'] = $id;
 
+        // The description promises the copy carries the original's template
+        // variable values, and resource_create echoes what it stored for the
+        // same reason: without this the only way to confirm the promise held is
+        // to re-read the copy. Read after the republish rather than reusing
+        // what it submitted, on the principle summarise() already applies to
+        // the resource's own fields.
+        //
+        // Stored values, not effective ones. The first cut of this used
+        // readTvsForTemplate() and, on a template with twenty-seven TVs,
+        // answered a two-value copy with twenty-five nulls -- describing the
+        // template rather than the copy.
+        $tvs = $this->storedTvs($modx, $newId, (int) ($result['template'] ?? 0));
+        if ($tvs !== []) {
+            $result['tvs'] = $tvs;
+        }
+
         $newAlias = (string) ($result['alias'] ?? '');
         if ($newAlias === '') {
             $warnings[] = sprintf(
