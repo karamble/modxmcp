@@ -70,6 +70,7 @@ final class Runtime
         // category" has no path to an answer.
         $registry->register(new Tools\CategoryListTool());
         $registry->register(new Tools\CategorySaveTool());
+        $registry->register(new Tools\CategoryDeleteTool());
 
         // Cross-cutting search. No MODX processor equivalent, because the
         // Manager has no screen for it, and answering "who calls this element"

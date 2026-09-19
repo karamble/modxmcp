@@ -67,6 +67,7 @@ Both are supported deliberately. Every shipping MCP client still opens with an i
 | `element_delete` | Permanent; elements have no recycle bin |
 | `category_list` | Categories with per-type element counts |
 | `category_save` | Create or rename a category |
+| `category_delete` | Remove a category, refusing one that still holds elements or sub-categories, and naming what is in it. Stricter than MODX, which deletes it regardless and silently uncategorises the contents |
 
 ### Finding things
 

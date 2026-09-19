@@ -103,6 +103,10 @@ Elements (chunks, snippets, templates, template variables, plugins)
   element_delete      permanent; elements have no recycle bin
   category_list       categories with per-type element counts
   category_save       create or rename a category
+  category_delete     remove a category. Refuses one that still holds
+                      elements or sub-categories, naming what is in it.
+                      Stricter than MODX, which deletes it regardless and
+                      silently resets the contents to uncategorised
 
 Finding things
   search              literal text across element bodies and resource content,
