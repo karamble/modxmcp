@@ -14,9 +14,10 @@ use MODX\Revolution\modX;
  * and their types. That is enough to describe any extra's data without a line of
  * per-extra code, including extras released long after this one.
  *
- * Two layouts coexist on a single MODX 3 install and both must be handled:
- * xPDO 3 PSR-4 packages under src/Model/ (Collections, SeoSuite, GoodNews) and
- * legacy 2.x packages under model/<name>/ (MIGX, FormIt, Login).
+ * Three layouts coexist on a single MODX 3 install and all must be handled:
+ * xPDO 3 PSR-4 packages under src/Model/ (Collections, SeoSuite, GoodNews),
+ * legacy 2.x packages under model/<name>/ (MIGX, FormIt, Login), and MODX's own
+ * core under src/Revolution/, which the `core` namespace addresses directly.
  */
 final class PackageScanner
 {
@@ -100,7 +101,7 @@ final class PackageScanner
     }
 
     /**
-     * Candidate metadata files for one extra, covering both layouts.
+     * Candidate metadata files for one namespace, covering every layout.
      *
      * @return string[]
      */
@@ -110,6 +111,11 @@ final class PackageScanner
             // xPDO 3, PSR-4
             $componentPath . 'src/Model/metadata.*.php',
             $componentPath . 'src/*/Model/metadata.*.php',
+            // MODX itself, whose `core` namespace points at {core_path} and
+            // keeps its map one level shallower: core/src/Revolution/. Without
+            // this the entire core is invisible, and ClassGuard's hard-block
+            // list — which names almost nothing else — never runs.
+            $componentPath . 'src/*/metadata.*.php',
             // legacy 2.x
             $componentPath . 'model/*/metadata.*.php',
             $componentPath . 'model/metadata.*.php',
