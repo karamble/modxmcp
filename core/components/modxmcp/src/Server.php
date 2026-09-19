@@ -97,23 +97,37 @@ final class Server
             // notification is answered 202 with no body.
             if ($request->isNotification()) {
                 $this->transport->emit(202, null);
-                $this->record($request, $token, true, null, $startedAt);
+                $this->record($request, $token, true, null, null, $startedAt);
                 return;
             }
 
             $result = $this->dispatch($request, $token, $protocol);
             $this->transport->emitResult($id, $protocol->finalizeResult($request, $result));
-            $this->record($request, $token, true, null, $startedAt);
+
+            // A tool-level failure travels as a successful result carrying
+            // isError, so reaching this line does not mean the call worked.
+            // Asking the result settles it. Without this, framing a refusal as
+            // a result would record it as a success -- and an unexpected
+            // Throwable inside a tool already was one, since that has been
+            // framed rather than rethrown since the registry was written.
+            $failure = ToolRegistry::failureIn($result);
+            $this->record(
+                $request,
+                $token,
+                $failure === null,
+                $failure['code'] ?? null,
+                $failure['message'] ?? null,
+                $startedAt
+            );
         } catch (McpException $e) {
             $this->transport->emitException($e, $id);
-            $this->record($request, $token, false, $e, $startedAt);
+            $this->record($request, $token, false, $e->getCode(), $e->getMessage(), $startedAt);
         } catch (\Throwable $e) {
             // Never leak internals to a caller that may not be authenticated.
             $this->modx->log(modX::LOG_LEVEL_ERROR,
                 'modxmcp: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
             $this->transport->emitError(500, $id, Errors::INTERNAL, 'Internal error');
-            $this->record($request, $token, false,
-                new McpException(500, Errors::INTERNAL, 'Internal error'), $startedAt);
+            $this->record($request, $token, false, Errors::INTERNAL, 'Internal error', $startedAt);
         }
     }
 
@@ -210,7 +224,8 @@ final class Server
         ?Request $request,
         ?ModxmcpToken $token,
         bool $success,
-        ?McpException $error,
+        ?int $errorCode,
+        ?string $errorMessage,
         float $startedAt
     ): void {
         $this->audit->record($this->modx, [
@@ -222,8 +237,8 @@ final class Server
                 ? (string) $request->param('name', '') : null,
             'arguments'     => $request ? $request->param('arguments') : null,
             'success'       => $success,
-            'error_code'    => $error ? $error->getCode() : null,
-            'error_message' => $error ? $error->getMessage() : null,
+            'error_code'    => $errorCode,
+            'error_message' => $errorMessage,
             'duration_ms'   => (int) round((microtime(true) - $startedAt) * 1000),
         ]);
     }

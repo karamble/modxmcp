@@ -3,6 +3,7 @@
 namespace MODXMCP\Registry;
 
 use MODX\Revolution\modX;
+use MODXMCP\Protocol\Errors;
 use MODXMCP\Protocol\McpException;
 
 /**
@@ -80,7 +81,23 @@ final class ToolRegistry
         try {
             $payload = $tool->call($modx, $arguments);
         } catch (McpException $e) {
-            throw $e;
+            // A deliberate refusal is a tool-level failure, exactly like a
+            // crash, and belongs in the same channel. Rethrowing it made a
+            // JSON-RPC error out of it, and a client is free to render one as a
+            // transport fault: the messages this extra works hardest on -- "No
+            // category named X. This site has: ... Nothing was written." -- were
+            // arriving as `Error POSTing to endpoint: {"jsonrpc":...}` while
+            // the useless "the details are in the error log" travelled the
+            // reliable path. The rule was already written above; it just was
+            // not applied one level further in.
+            //
+            // Routing and authorisation stay protocol errors, and both are
+            // raised before this block: an unknown tool is a 404, and a missing
+            // scope a 403, neither of which is a tool reporting on its own work.
+            return $this->frame([
+                'error'      => $e->getMessage(),
+                'error_code' => $e->getCode(),
+            ], true);
         } catch (\Throwable $e) {
             // A tool blowing up is a tool-level failure, not a protocol failure:
             // it is reported inside a successful JSON-RPC result with isError.
@@ -98,11 +115,38 @@ final class ToolRegistry
             ));
 
             return $this->frame([
-                'error' => "The tool '{$name}' failed. The details are in the MODX error log.",
+                'error'      => "The tool '{$name}' failed. The details are in the MODX error log.",
+                'error_code' => Errors::INTERNAL,
             ], true);
         }
 
         return $this->frame($payload, false);
+    }
+
+    /**
+     * The failure inside a framed result, for the audit log.
+     *
+     * Framing a refusal as a result means dispatch returns normally, and the
+     * caller that records the audit row would otherwise write it down as a
+     * success. That would have quietly hollowed out the one guarantee worth
+     * making about the log -- that refusals appear in it with their code and
+     * message -- so the result is asked what it is rather than assumed.
+     *
+     * @param array<string,mixed> $result
+     * @return array{code:int,message:string}|null
+     */
+    public static function failureIn(array $result): ?array
+    {
+        if (($result['isError'] ?? false) !== true) {
+            return null;
+        }
+
+        $payload = $result['structuredContent'] ?? [];
+
+        return [
+            'code'    => (int) ($payload['error_code'] ?? Errors::INTERNAL),
+            'message' => (string) ($payload['error'] ?? 'The tool reported a failure.'),
+        ];
     }
 
     /**
