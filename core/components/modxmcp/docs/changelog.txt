@@ -491,4 +491,107 @@ Nothing changed in the legacy path, in tool behaviour, or in any site's
 data. The upgrade rewrites files only; its resolvers are idempotent, and
 existing system settings, tokens, the audit log and the endpoint resource
 are all preserved.
+1.1.0-pl
+========
+Answers a full external audit of the tool surface against 1.0.2 — issues #1
+through #4 and #7, plus two pull requests — and one thing that audit did not
+find.
 
+REQUIRES PHP 8.2. Not a new requirement so much as an honest one: the support
+traits declare constants, which PHP only permits in a trait from 8.2, and
+ExcerptSupport and ObjectSupport have done so since 1.0.0. On PHP 8.1 those
+files fatal at include time, taking modxmcp_search and the three generic
+object tools with them, while the package advertised >=8.1. If you are on 8.1
+those four tools have never worked; the package now says so before installing
+rather than failing silently afterwards.
+
+Discovery
+- The MODX core is discovered. The `core` namespace was registered like any
+  other but its model map sits at core/src/Revolution/metadata.mysql.php, one
+  level shallower than an extra's, so no glob matched it and the whole core was
+  invisible. ClassGuard's hard-block list names almost nothing but core
+  classes, so it had never once run.
+- The core's deeper maps are discovered too: media sources under
+  src/Revolution/Sources/ and the transport classes under
+  src/Revolution/Transport/. glob() does not let * cross a separator, so the
+  pattern that found the core stopped one directory short of both.
+- A hard-blocked class now says so. It used to answer "Unknown class ... use
+  modxmcp_schema_list", which was wrong twice over, since the class existed and
+  schema_list would never have named it.
+
+New tools
+- modxmcp_media_source_list — the media sources this site defines, with the id
+  modxmcp_file_upload expects, where each one is rooted, and whether the upload
+  source allowlist covers it. Credentials are never returned. Gated on MODX's
+  own source_view permission, and remote sources are not contacted unless
+  asked, because initialising an S3 source checks the bucket over the network.
+- modxmcp_category_delete — removes a category, refusing one that still holds
+  elements or sub-categories and naming what is in it. Stricter than MODX,
+  which deletes the category regardless, resets everything inside it to
+  uncategorised, and cascades through sub-categories without saying so.
+
+Data loss fixed
+- modxmcp_element_get returns the fields modxmcp_element_save replaces
+  wholesale: a snippet, plugin or template's default properties, and a template
+  variable's caption, display, option list, rank and input and output
+  configuration. element_save's description told callers to "send every option
+  you want to keep" and nothing in the surface could say what those were, so
+  adding one property destroyed the others with the loss invisible short of
+  reading the database.
+- modxmcp_element_delete echoes the same fields, and a plugin's event bindings,
+  gathered before the processor removes them. Element removal is permanent and
+  that echo is the recovery path; a plugin rebuilt from the old one came back
+  bound to nothing and never ran again.
+
+Refusals and warnings
+- A refusal raised by a tool is reported as a result carrying isError, not as a
+  JSON-RPC protocol error. Clients are entitled to render a 4xx as a transport
+  failure, so the most useful messages in the extra — the ones that name the
+  problem, list the valid values and say "Nothing was written" — were the ones
+  arriving mangled, while "the details are in the error log" travelled the
+  reliable path. Routing and authorisation stay protocol errors: both are
+  raised before a tool runs.
+- The audit log records a framed failure as a failure. It could not before, and
+  an unexpected exception inside a tool had been recorded as a SUCCESS since
+  the registry was written, because those have always been framed rather than
+  rethrown.
+- modxmcp_element_delete warns when something still calls the element it
+  removed, naming the resources and elements with their URIs and published
+  state. modxmcp_search has answered "who calls this" since 1.0.0 and the
+  delete path never asked it, so a chunk called by two published pages was
+  removed without a word and those pages rendered without it.
+- modxmcp_element_save warns when a template variable's input_type is one
+  nothing can render. Its own description warned that "radio is not a type",
+  and then accepted radio silently. Extras register their own types, so this is
+  a warning and not a refusal, and it recognises a type any template variable
+  on the site already uses.
+- Deleting a template that resources still use is refused up front, naming how
+  many. MODX rejects it anyway; the tool's description had claimed the
+  resources would be left without a template, and the warning that counted them
+  was unreachable code appended to a result built after the processor throws.
+
+Smaller
+- tools/list is filtered by the calling token's scopes. A read-only token was
+  offered every write tool and would announce a publish, attempt it and spend a
+  round trip on the refusal; it now sees thirteen tools, all of which it can
+  call.
+- modxmcp_schema_list no longer suppresses its explanatory note in the one case
+  that needs it, where every discovered class is hard blocked and the response
+  was an unexplained {"shown":0,"readable":0}.
+- modxmcp_resource_duplicate echoes the template variable values the copy
+  inherited, which its description had always promised.
+- modxmcp_cache_refresh clears modxmcp's own discovery and advisory caches on a
+  full clear. It never had, and their 300-second TTL was the only thing that
+  expired a stale class list, so installing an extra and then calling the tool
+  whose whole job is clearing caches still showed the old site.
+- Media sources and package providers are permanently blocked from generic
+  access. Both keep credentials inside a serialised properties column, where
+  field-name masking cannot see them.
+- Documented that modxmcp.upload_path_allowlist is relative to the media
+  source, not to assets/. The Filesystem source MODX ships has no configured
+  base path and therefore resolves to the webroot, so one allowlist entry means
+  different directories on different sources.
+
+Nothing in this release changes any site's data, and the upgrade rewrites files
+only. Existing system settings, tokens, the audit log and the endpoint resource
+are all preserved.
