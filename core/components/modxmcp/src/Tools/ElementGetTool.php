@@ -85,6 +85,11 @@ final class ElementGetTool extends AbstractTool
             ));
         }
 
+        // Everything element_save replaces wholesale rather than merging. Its
+        // description tells the caller to "send every option you want to keep",
+        // which is only actionable if a read can show what is there now.
+        $out += $this->replacedFields($element, $type, $typeKey);
+
         // A static element's body lives on disk; editing the database copy would
         // be silently discarded on the next render.
         if (!empty($out['static'])) {
