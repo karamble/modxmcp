@@ -80,6 +80,10 @@ Both are supported deliberately. Every shipping MCP client still opens with an i
 | --- | --- |
 | `file_upload` | One file, base64-encoded, through the Manager upload path, so the media source policy, the upload settings and the file-manager events all apply. Ships disabled: the directory allowlist it is gated on is empty until an administrator fills it in on the Settings tab. Needs the `write:media` token scope. PHP and other server-executable extensions are refused outright, in every dot-segment of the name, and no setting can enable them |
 
+`modxmcp.upload_path_allowlist` is relative to the media source, not to `assets/`. That is easy to miss, because the Filesystem source MODX ships has no configured base path and therefore resolves to the webroot: with `images/*` allowlisted, an upload to `images/` against that source lands in `<webroot>/images/`, nowhere near `assets/`. A source whose base path is `assets/images/products/` puts the same upload at `<webroot>/assets/images/products/images/`. One allowlist entry, two very different places.
+
+So check the base path of the source you mean to use before writing the allowlist, and pass `source` explicitly rather than inheriting the default of 1. The `url` in the result is resolved from the source itself and is the authoritative answer to where the file actually went.
+
 ### Orientation and housekeeping
 
 | Tool | What it does |

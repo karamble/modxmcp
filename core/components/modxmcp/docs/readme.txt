@@ -119,6 +119,16 @@ Files
                       extensions are refused outright, in every dot-segment of
                       the name, and no setting can enable them
 
+  modxmcp.upload_path_allowlist is relative to the MEDIA SOURCE, not to
+  assets/. The Filesystem source MODX ships has no configured base path, so
+  it resolves to the webroot: with images/* allowlisted, an upload to
+  images/ against that source lands in <webroot>/images/, nowhere near
+  assets/. A source based at assets/images/products/ puts the same upload
+  at <webroot>/assets/images/products/images/. Check the base path of the
+  source you mean to use, and pass `source` explicitly rather than
+  inheriting the default of 1. The url in the result is resolved from the
+  source and is the authoritative answer to where the file went.
+
 Orientation and housekeeping
   site_info           versions (including a build fingerprint of the running
                       code), contexts, templates, extras, and advisories for
