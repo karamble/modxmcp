@@ -79,11 +79,12 @@ Both are supported deliberately. Every shipping MCP client still opens with an i
 
 | Tool | What it does |
 | --- | --- |
+| `media_source_list` | The media sources this site defines, with the id `file_upload` expects, the filesystem path and public URL each is rooted at, and whether uploads to it are permitted. Credentials are never returned |
 | `file_upload` | One file, base64-encoded, through the Manager upload path, so the media source policy, the upload settings and the file-manager events all apply. Ships disabled: the directory allowlist it is gated on is empty until an administrator fills it in on the Settings tab. Needs the `write:media` token scope. PHP and other server-executable extensions are refused outright, in every dot-segment of the name, and no setting can enable them |
 
 `modxmcp.upload_path_allowlist` is relative to the media source, not to `assets/`. That is easy to miss, because the Filesystem source MODX ships has no configured base path and therefore resolves to the webroot: with `images/*` allowlisted, an upload to `images/` against that source lands in `<webroot>/images/`, nowhere near `assets/`. A source whose base path is `assets/images/products/` puts the same upload at `<webroot>/assets/images/products/images/`. One allowlist entry, two very different places.
 
-So check the base path of the source you mean to use before writing the allowlist, and pass `source` explicitly rather than inheriting the default of 1. The `url` in the result is resolved from the source itself and is the authoritative answer to where the file actually went.
+So check the base path of the source you mean to use before writing the allowlist, and pass `source` explicitly rather than inheriting the default of 1. `media_source_list` is how to check: it reports each source's resolved base path and base URL, and whether the allowlist currently permits uploading to it. The `url` in an upload result is resolved from the source itself and is the authoritative answer to where the file actually went.
 
 ### Orientation and housekeeping
 
@@ -117,7 +118,7 @@ Beyond resources and elements, modxmcp can discover and read the data of any ins
 
 Reading or writing actual rows is opt-in per class, via `modxmcp.read_class_allowlist` and `modxmcp.write_class_allowlist`. Both are empty by default, and this is deliberate: xPDO has no permission model, so unlike the resource and element tools there is no MODX permission check behind generic access. Those settings are the only control.
 
-Some classes can never be reached, whatever the settings say: users, sessions, access-control rules, system settings, media sources, and modxmcp's own tokens and audit log. Fields that look like secrets are masked on read.
+Some classes can never be reached through generic access, whatever the settings say: users, sessions, access-control rules, system settings, package providers, media sources, and modxmcp's own tokens and audit log. Fields that look like secrets are masked on read, and where that is not enough the class is blocked outright — a media source keeps its S3 or FTP credentials inside one serialised column, which field-name masking cannot see into. Media sources are instead readable through `media_source_list`, which returns everything about them except those credentials.
 
 ## Security notes
 

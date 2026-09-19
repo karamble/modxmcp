@@ -89,8 +89,12 @@ final class Runtime
         $registry->register(new Tools\ObjectSaveTool());
         $registry->register(new Tools\ObjectDeleteTool());
 
-        // Files. One tool, and the only one that ships disabled: the path
-        // allowlist it is gated on is empty until an administrator fills it in.
+        // Files. The listing is an ordinary read; the upload is the one tool in
+        // the set that ships disabled, because the path allowlist it is gated on
+        // is empty until an administrator fills it in. Listing first is the
+        // point: file_upload takes a source id, and the allowlist is relative to
+        // whatever that source is rooted at.
+        $registry->register(new Tools\MediaSourceListTool());
         $registry->register(new Tools\FileUploadTool());
 
         // Maintenance

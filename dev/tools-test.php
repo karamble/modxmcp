@@ -70,6 +70,20 @@ function call(string $url, string $token, string $tool, array $args = []): array
     ];
 }
 
+/**
+ * The message from a refusal, wherever it travelled.
+ *
+ * A deliberate refusal is framed as a result carrying isError, and only
+ * genuine protocol failures -- unknown tool, missing scope, a malformed
+ * envelope -- come back as a JSON-RPC error. A probe that reads just one
+ * channel silently asserts against an empty string: that is how the php
+ * dot-segment check came to pass on a substring of nothing.
+ */
+function refusal(array $response): string
+{
+    return (string) ($response['error']['message'] ?? ($response['result']['error'] ?? ''));
+}
+
 function check(string $label, bool $ok, string $detail = ''): void
 {
     global $pass, $fail;
@@ -671,9 +685,80 @@ $dupe = call($url, $token, 'modxmcp_resource_create', [
     'alias'     => $alias . '-moved',
     'published' => true,
 ]);
-$msg = $dupe['error']['message'] ?? ($dupe['result']['error'] ?? '');
+$msg = refusal($dupe);
 check('processor field errors reach the caller',
     stripos((string) $msg, 'alias') !== false, substr((string) $msg, 0, 60));
+
+// --- media sources -----------------------------------------------------------
+//
+// The listing is the only way in: generic access to a media source is
+// permanently blocked, because the credentials of a remote source sit inside
+// one serialised column that field-name masking cannot see into. Which makes
+// the absence of that column the assertion that matters most here.
+$sources = call($url, $token, 'modxmcp_media_source_list');
+$rows    = $sources['result']['sources'] ?? [];
+
+check('media_source_list returns at least the default source', count($rows) >= 1,
+    count($rows) . ' source(s)');
+
+$leaked = [];
+foreach ($rows as $row) {
+    foreach (['properties', 'password', 'api_key', 'secret'] as $forbidden) {
+        if (array_key_exists($forbidden, $row)) {
+            $leaked[] = $forbidden;
+        }
+    }
+}
+check('no source row carries a credential-bearing column', $leaked === [],
+    $leaked === [] ? 'properties is never returned' : 'LEAKED: ' . implode(', ', $leaked));
+
+$first = $rows[0] ?? [];
+check('a source reports the id, name and class file_upload needs',
+    isset($first['id'], $first['name'], $first['class_key']));
+check('a source says whether the upload allowlist covers it',
+    array_key_exists('upload_allowlisted', $first),
+    'so a caller is not left to discover a refusal');
+check('the envelope says whether uploads are possible at all',
+    array_key_exists('uploads_enabled', $sources['result'] ?? []),
+    'upload_path_allowlist ships empty, which no per-source flag can convey');
+check('a source reports where it is rooted, and how far the answer got',
+    array_key_exists('base_path', $first) && array_key_exists('paths', $first),
+    sprintf('paths=%s %s', (string) ($first['paths'] ?? '?'),
+        (string) ($first['base_path'] ?? 'unresolved, reported rather than hidden')));
+check('an unresolvable source is never reported as resolved',
+    ($first['paths'] ?? '') !== 'resolved' || ($first['base_path'] ?? null) !== null,
+    'resolved implies a path; the four states are distinguished');
+
+// The point of #7: before the Sources map was discovered this answered
+// "Unknown class", which is wrong twice over -- the class exists, and
+// schema_list would never have named it.
+$blocked = call($url, $token, 'modxmcp_object_list', [
+    'class' => 'MODX\\Revolution\\Sources\\modMediaSource',
+]);
+$blockedMsg = refusal($blocked);
+check('a media source class is refused as blocked, not as unknown',
+    stripos($blockedMsg, 'permanently blocked') !== false
+        && stripos($blockedMsg, 'unknown class') === false,
+    substr($blockedMsg, 0, 58));
+check('that refusal names the tool that can answer instead',
+    stripos($blockedMsg, 'media_source_list') !== false);
+
+// The deeper glob reaches the transport map too, and the two classes in it are
+// deliberately treated differently: the provider holds credentials, the
+// package is inventory.
+$provider = refusal(call($url, $token, 'modxmcp_object_list', [
+    'class' => 'MODX\\Revolution\\Transport\\modTransportProvider',
+]));
+check('a package provider is permanently blocked',
+    stripos($provider, 'permanently blocked') !== false, substr($provider, 0, 58));
+
+$package = refusal(call($url, $token, 'modxmcp_object_list', [
+    'class' => 'MODX\\Revolution\\Transport\\modTransportPackage',
+]));
+check('package inventory is discoverable and merely un-allowlisted',
+    stripos($package, 'read allowlist') !== false
+        && stripos($package, 'permanently blocked') === false,
+    substr($package, 0, 58));
 
 // --- file upload -------------------------------------------------------------
 //
@@ -685,7 +770,7 @@ check('processor field errors reach the caller',
 $probe = call($url, $token, 'modxmcp_file_upload', [
     'path' => '../evil/', 'filename' => 'a.jpg', 'content_base64' => base64_encode('x'),
 ]);
-$probeMsg = (string) ($probe['error']['message'] ?? ($probe['result']['error'] ?? ''));
+$probeMsg = refusal($probe);
 if (stripos($probeMsg, 'scope') !== false) {
     skip('file_upload suite', 'token lacks the write:media scope');
 } else {
@@ -694,7 +779,7 @@ if (stripos($probeMsg, 'scope') !== false) {
     $seg = call($url, $token, 'modxmcp_file_upload', [
         'path' => 'images/', 'filename' => 'shell.php.jpg', 'content_base64' => base64_encode('x'),
     ]);
-    $segMsg = (string) ($seg['error']['message'] ?? '');
+    $segMsg = refusal($seg);
     check('a php dot-segment is refused whatever the final extension',
         stripos($segMsg, 'segment') !== false || stripos($segMsg, 'blocked') !== false,
         substr($segMsg, 0, 60));
@@ -710,7 +795,7 @@ if (stripos($probeMsg, 'scope') !== false) {
         $closed = call($url, $token, 'modxmcp_file_upload', [
             'path' => 'images/', 'filename' => 'probe.jpg', 'content_base64' => base64_encode('x'),
         ]);
-        $closedMsg = (string) ($closed['error']['message'] ?? '');
+        $closedMsg = refusal($closed);
         if (stripos($closedMsg, 'upload_path_allowlist') !== false) {
             check('uploads are disabled by default and the refusal names the setting', true);
         } else {
@@ -739,7 +824,7 @@ if (stripos($probeMsg, 'scope') !== false) {
         $dupe = call($url, $token, 'modxmcp_file_upload', [
             'path' => $uploadDir, 'filename' => $name, 'content_base64' => base64_encode($png),
         ]);
-        $dupeMsg = (string) ($dupe['error']['message'] ?? '');
+        $dupeMsg = refusal($dupe);
         check('a second upload without overwrite is refused and says how to proceed',
             stripos($dupeMsg, 'overwrite') !== false, substr($dupeMsg, 0, 60));
 
@@ -787,22 +872,18 @@ check('a TV can be detached and then deleted', empty($tvGone['isError']) && $tvG
     $tvGone['error']['message'] ?? '');
 call($url, $token, 'modxmcp_element_delete', ['type' => 'plugin', 'name' => $pluginName]);
 call($url, $token, 'modxmcp_element_delete', ['type' => 'chunk', 'name' => $categorised]);
-// The category last: deleting it earlier would orphan the chunk filed under it.
+// The category last, and deliberately so: category_delete refuses one that
+// still holds anything, so removing it only works because the chunk filed
+// under it went first. That ordering is the assertion, not an accident of it.
 //
-// There is no category delete tool, by design, so this goes through the generic
-// object path. That needs write:objects AND modCategory in the writable-classes
-// list, which most sites will not have, so it is best effort and says so rather
-// than leaving an unexplained category behind.
+// This used to go through the generic object path, which needed write:objects
+// and modCategory in the writable-classes list -- something most sites do not
+// have -- so cleanup was best effort and usually left a category behind.
 if (($catId ?? 0) > 0) {
-    $catGone = call($url, $token, 'modxmcp_object_delete', [
-        'class'   => 'MODX\\Revolution\\modCategory',
-        'pk'      => (string) $catId,
-        'confirm' => true,
-    ]);
-    if (!empty($catGone['isError']) || $catGone['error'] !== null) {
-        echo "  NOTE: category '{$catName}' (id {$catId}) was left behind; delete it in the "
-            . "Manager, or allowlist MODX\\Revolution\\modCategory for generic writes.\n";
-    }
+    $catGone = call($url, $token, 'modxmcp_category_delete', ['id' => $catId]);
+    check('the test category is removable once its elements are gone',
+        empty($catGone['isError']) && $catGone['error'] === null,
+        refusal($catGone) !== '' ? substr(refusal($catGone), 0, 58) : "removed id {$catId}");
 }
 
 // Anything created by the duplicate-alias probe would be a bug, but sweep anyway.

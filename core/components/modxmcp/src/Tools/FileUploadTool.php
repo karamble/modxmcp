@@ -31,6 +31,10 @@ use MODXMCP\Registry\Schema;
  */
 final class FileUploadTool extends AbstractTool
 {
+    // The allowlist predicate, shared with media_source_list so the listing
+    // cannot report an upload as permitted that this tool then refuses.
+    use MediaSourceSupport;
+
     /**
      * Extensions no setting can enable, matched against EVERY dot-segment of
      * the filename, not just the final extension. "shell.php.jpg" ends in a
@@ -281,15 +285,18 @@ final class FileUploadTool extends AbstractTool
 
     private function assertSourceAllowed(modX $modx, int $sourceId): void
     {
-        $raw     = trim((string) $modx->getOption('modxmcp.upload_source_allowlist', null, '1'));
-        $entries = preg_split('/[\s,]+/', $raw, -1, PREG_SPLIT_NO_EMPTY) ?: [];
-
-        if (!in_array((string) $sourceId, $entries, true)) {
-            throw McpException::forbidden(
-                "Media source {$sourceId} is not covered by modxmcp.upload_source_allowlist "
-                . "(currently '{$raw}'). An administrator can extend the list on the modxmcp Settings tab."
-            );
+        if ($this->sourceAllowedForUpload($modx, $sourceId)) {
+            return;
         }
+
+        throw McpException::forbidden(sprintf(
+            'Media source %d is not covered by modxmcp.upload_source_allowlist (currently '
+            . "'%s'). An administrator can extend the list on the modxmcp Settings tab. "
+            . 'modxmcp_media_source_list shows which sources exist and which of them uploads '
+            . 'are permitted to.',
+            $sourceId,
+            implode(', ', $this->uploadSourceAllowlist($modx))
+        ));
     }
 
     private function assertExtensionAllowed(modX $modx, string $filename): void
@@ -452,14 +459,9 @@ final class FileUploadTool extends AbstractTool
 
     private function publicUrl(modX $modx, modMediaSource $source, string $relPath): string
     {
-        $url = (string) $source->getObjectUrl($relPath);
-        if ($url === '') {
-            return '';
-        }
-        if (!preg_match('#^https?://#i', $url)) {
-            $url = rtrim((string) $modx->getOption('site_url'), '/') . '/' . ltrim($url, '/');
-        }
-
-        return $url;
+        // Through the shared helper rather than beside it: media_source_list
+        // reports a source's base URL the same way, and two copies of this
+        // would be two chances to disagree about it.
+        return $this->absoluteSourceUrl($modx, (string) $source->getObjectUrl($relPath));
     }
 }

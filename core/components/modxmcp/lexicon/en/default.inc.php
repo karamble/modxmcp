@@ -82,7 +82,7 @@ $_lang['modxmcp.set.site_notes_desc']       = 'Free text returned by the site in
 $_lang['modxmcp.set.read_class_allowlist']  = 'Readable classes';
 $_lang['modxmcp.set.read_class_allowlist_desc'] = 'Classes generic object reads may touch. Empty means none. Comma or space separated; a trailing * matches a prefix. Unlike the resource and element tools, this path has no MODX permission check behind it, so these lists are the only control.';
 $_lang['modxmcp.set.write_class_allowlist'] = 'Writable classes';
-$_lang['modxmcp.set.write_class_allowlist_desc'] = 'Classes generic object writes may touch. Empty means none. Users, sessions, access-control rules, system settings and modxmcp own tables can never be reached whatever is listed here, and resources and elements can never be written this way because that would bypass the MODX processors.';
+$_lang['modxmcp.set.write_class_allowlist_desc'] = 'Classes generic object writes may touch. Empty means none. Users, sessions, access-control rules, system settings, package providers, media sources and modxmcp own tables can never be reached whatever is listed here, and resources and elements can never be written this way because that would bypass the MODX processors.';
 
 $_lang['modxmcp.set.upload_path_allowlist'] = 'Upload directories';
 $_lang['modxmcp.set.upload_path_allowlist_desc'] = 'Directories the file upload tool may write into, relative to the media source root. Empty means uploads are disabled. Comma or space separated; a trailing * matches a prefix, e.g. images/uploads/*. The media source access policy and the MODX upload settings still apply on top.';
@@ -91,7 +91,7 @@ $_lang['modxmcp.set.upload_extension_allowlist_desc'] = 'File extensions uploads
 $_lang['modxmcp.set.upload_max_bytes'] = 'Upload size limit (bytes)';
 $_lang['modxmcp.set.upload_max_bytes_desc'] = 'Decoded size cap for one upload. The MODX upload_maxsize system setting applies as well; the stricter of the two wins.';
 $_lang['modxmcp.set.upload_source_allowlist'] = 'Upload media sources';
-$_lang['modxmcp.set.upload_source_allowlist_desc'] = 'Ids of the media sources uploads may target. The default filesystem source is 1.';
+$_lang['modxmcp.set.upload_source_allowlist_desc'] = 'Ids of the media sources uploads may target. The default filesystem source is 1. Run the modxmcp_media_source_list tool to see which sources this site has, where each is rooted and which of them this list covers.';
 
 $_lang['modxmcp.stats.tokens']              = 'Tokens';
 $_lang['modxmcp.stats.audit']               = 'Audit rows';

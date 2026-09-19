@@ -67,6 +67,19 @@ final class ClassGuard
         // and S3 backends beside the base class. A pattern naming the base
         // class alone would match nothing at all.
         '/^MODX\\\\Revolution\\\\Sources\\\\/i',
+
+        // A package provider holds the credentials used to reach it: api_key,
+        // and whatever a provider puts in its own `properties` blob. Only
+        // api_key is caught by the field-name patterns below, so the argument
+        // is the settings argument once more.
+        //
+        // Anchored, unlike the Sources entry above, and deliberately so. The
+        // sibling modTransportPackage is package inventory -- signatures,
+        // versions, a manifest -- with nothing credential-shaped in it, and it
+        // is useful to read. WRITE_BLOCKED_DESCENDANTS_OF below records how
+        // anchoring let modDocument slip past a block meant for it; this is the
+        // opposite case, where the anchor is what keeps the block honest.
+        '/^MODX\\\\Revolution\\\\Transport\\\\modTransportProvider$/i',
     ];
 
     /**
@@ -162,6 +175,26 @@ final class ClassGuard
         $this->modx = $modx;
     }
 
+    /**
+     * Is this one of the classes media_source_list can answer for?
+     *
+     * Ancestry as well as name, for the reason HARD_BLOCKED_DESCENDANTS_OF
+     * exists: an extra that adds a storage backend subclasses modMediaSource
+     * under a name in its own namespace, and is blocked by that rule rather
+     * than by the namespace pattern. Testing only the pattern would hand those
+     * classes the dead-end refusal the pointer was added to remove.
+     */
+    public function isMediaSource(string $class): bool
+    {
+        foreach (self::HARD_BLOCKED as $pattern) {
+            if (strpos($pattern, 'Sources') !== false && preg_match($pattern, $class)) {
+                return true;
+            }
+        }
+
+        return $this->descendsFrom($class, self::HARD_BLOCKED_DESCENDANTS_OF);
+    }
+
     public function isHardBlocked(string $class): bool
     {
         $key = strtolower($class);
@@ -252,10 +285,22 @@ final class ClassGuard
     public function explainDenial(string $class, string $operation): string
     {
         if ($this->isHardBlocked($class)) {
-            return "Access to {$class} is permanently blocked by modxmcp. It holds credentials, "
+            $why = "Access to {$class} is permanently blocked by modxmcp. It holds credentials, "
                 . 'session data, access-control rules, system settings, media source '
-                . 'configuration, or modxmcp\'s own tokens and audit trail. No setting can '
+                . 'credentials, or modxmcp\'s own tokens and audit trail. No setting can '
                 . 'enable it.';
+
+            // This method exists so a refusal is actionable rather than a dead
+            // end, and for a media source it no longer has to be one: the
+            // curated tool returns everything about a source except the
+            // properties blob this block is here to withhold.
+            if ($this->isMediaSource($class)) {
+                $why .= ' Use modxmcp_media_source_list instead: it returns each source\'s id, '
+                    . 'name, class, base path and base URL, which is everything here apart from '
+                    . 'the credentials.';
+            }
+
+            return $why;
         }
 
         if ($operation === 'write' && $this->isWriteBlocked($class)) {

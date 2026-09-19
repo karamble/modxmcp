@@ -50,9 +50,10 @@ final class SchemaListTool extends AbstractTool
         $only   = !empty($arguments['accessible_only']);
 
         $byExtra    = [];
-        $blocked    = 0;
-        $readable   = 0;
-        $totalShown = 0;
+        $blocked      = 0;
+        $readable     = 0;
+        $totalShown   = 0;
+        $mediaBlocked = false;
 
         foreach ($scanner->classes() as $class => $entry) {
             if ($extra !== null && $entry['extra'] !== $extra) {
@@ -67,6 +68,10 @@ final class SchemaListTool extends AbstractTool
 
             if ($hardBlocked) {
                 $blocked++;
+                // Only worth pointing at the media source tool when a media
+                // source is actually among what was withheld. Advertising it
+                // beside a blocked modUser would be noise.
+                $mediaBlocked = $mediaBlocked || $guard->isMediaSource($class);
                 // Named but not detailed, so a caller understands why a class it
                 // expected to see is absent rather than assuming it is missing.
                 continue;
@@ -97,7 +102,8 @@ final class SchemaListTool extends AbstractTool
                 $totalShown,
                 $readable,
                 $blocked,
-                $extra !== null || $search !== null || $only
+                $extra !== null || $search !== null || $only,
+                $mediaBlocked
             ),
         ];
     }
@@ -111,22 +117,37 @@ final class SchemaListTool extends AbstractTool
      * {"shown":0,"readable":0,"hard_blocked":2,"note":null} with no way to tell
      * "this site defines nothing" from "you may see none of it".
      */
-    private function note(int $shown, int $readable, int $blocked, bool $filtered): ?string
+    private function note(
+        int $shown,
+        int $readable,
+        int $blocked,
+        bool $filtered,
+        bool $mediaBlocked = false
+    ): ?string
     {
+        // Blocked before filtered, and the order is load-bearing. A search that
+        // matches only hard-blocked classes is not a search that matched
+        // nothing: "Nothing matched" would send the caller off to widen a
+        // filter that was working correctly, when the real answer is that the
+        // classes exist and are withheld.
+        if ($shown === 0 && $blocked > 0) {
+            return sprintf(
+                'Nothing to show: all %d %s permanently blocked by modxmcp. They hold '
+                . 'credentials, sessions, access-control rules, system settings, media sources, '
+                . 'or modxmcp\'s own tables. No setting can enable them, and this is not the '
+                . 'same as nothing having matched.%s',
+                $blocked,
+                $filtered ? 'matching class(es) are' : 'discovered class(es) are',
+                $mediaBlocked
+                    ? ' Media sources are readable through modxmcp_media_source_list, which'
+                      . ' omits their credentials.'
+                    : ''
+            );
+        }
+
         if ($shown === 0 && $filtered) {
             return 'Nothing matched. Drop the extra, search and accessible_only arguments to '
                 . 'see everything this site defines.';
-        }
-
-        if ($shown === 0 && $blocked > 0) {
-            return sprintf(
-                'Every one of the %d discovered class(es) is permanently blocked by modxmcp, '
-                . 'which is why the list is empty: they hold credentials, sessions, '
-                . 'access-control rules, system settings, media sources, or modxmcp\'s own '
-                . 'tables. No setting can enable them. This is not the same as the site '
-                . 'defining no data classes.',
-                $blocked
-            );
         }
 
         if ($shown === 0) {

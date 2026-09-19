@@ -18,6 +18,11 @@ use MODX\Revolution\modX;
  * xPDO 3 PSR-4 packages under src/Model/ (Collections, SeoSuite, GoodNews),
  * legacy 2.x packages under model/<name>/ (MIGX, FormIt, Login), and MODX's own
  * core under src/Revolution/, which the `core` namespace addresses directly.
+ *
+ * The core is also the one namespace that keeps more than one map. Media sources
+ * live in src/Revolution/Sources/ and the transport classes in
+ * src/Revolution/Transport/, each with a metadata file of its own, so the core
+ * needs a pattern one level deeper than the one that finds its main map.
  */
 final class PackageScanner
 {
@@ -116,6 +121,14 @@ final class PackageScanner
             // this the entire core is invisible, and ClassGuard's hard-block
             // list — which names almost nothing else — never runs.
             $componentPath . 'src/*/metadata.*.php',
+            // Deeper still, and the same reasoning a second time: glob() does
+            // not let * cross a separator, so the pattern above stops one
+            // directory short of core/src/Revolution/Sources/ and
+            // core/src/Revolution/Transport/, which hold maps of their own.
+            // Without this, object_list on a media source answers "Unknown
+            // class" -- misleading twice, since the class exists and
+            // schema_list will never name it.
+            $componentPath . 'src/*/*/metadata.*.php',
             // legacy 2.x
             $componentPath . 'model/*/metadata.*.php',
             $componentPath . 'model/metadata.*.php',
