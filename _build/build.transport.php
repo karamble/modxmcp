@@ -178,7 +178,12 @@ $builder->setPackageAttributes([
     'license'   => $read($sources['docs'] . 'license.txt'),
     'readme'    => $read($sources['docs'] . 'readme.txt'),
     'changelog' => $read($sources['docs'] . 'changelog.txt'),
-    'requires'  => ['php' => '>=8.1', 'modx' => '>=3.0'],
+    // 8.2, not 8.1: the support traits declare constants, which PHP only
+    // allows in a trait from 8.2. This has been true of ExcerptSupport and
+    // ObjectSupport since before it was written down, so 8.1 was never a
+    // version this package actually ran on -- search and the generic object
+    // tools would fatal at include time.
+    'requires'  => ['php' => '>=8.2', 'modx' => '>=3.0'],
 ]);
 
 $modx->log(modX::LOG_LEVEL_INFO, 'packing...');

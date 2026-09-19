@@ -3,6 +3,7 @@
 namespace MODXMCP\Tools;
 
 use MODX\Revolution\modPluginEvent;
+use MODX\Revolution\modTemplateVar;
 use MODX\Revolution\modTemplateVarTemplate;
 use MODX\Revolution\modX;
 use MODXMCP\Protocol\McpException;
@@ -248,12 +249,155 @@ final class ElementSaveTool extends AbstractTool
         }
 
         $warnings = array_merge($warnings, $this->bindingWarnings($modx, $typeKey, $saved));
+        $warnings = array_merge($warnings, $this->inputTypeWarnings($modx, $typeKey, $saved));
 
         if ($warnings !== []) {
             $result['warnings'] = $warnings;
         }
 
         return $result;
+    }
+
+    /**
+     * The template variable input types MODX itself ships.
+     *
+     * Read off the render directory rather than invented: MODX resolves an
+     * input type by looking for <type>.class.php under
+     * {processors_path}Element/TemplateVar/Renders/mgr/input/, and these are
+     * the seventeen files it ships. Deliberately the same list this tool's
+     * description recites, so the two cannot disagree.
+     */
+    private const KNOWN_INPUT_TYPES = [
+        'text', 'textarea', 'richtext', 'image', 'file', 'listbox',
+        'listbox-multiple', 'checkbox', 'option', 'date', 'number', 'email',
+        'url', 'tag', 'autotag', 'resourcelist', 'hidden',
+    ];
+
+    /**
+     * Wrong names people reach for, and what MODX actually calls the thing.
+     *
+     * `radio` heads the list because it is the one this tool's own description
+     * warns about and then accepted anyway.
+     */
+    private const INPUT_TYPE_HINTS = [
+        'radio'       => 'option',
+        'radiobutton' => 'option',
+        'radiogroup'  => 'option',
+        'select'      => 'listbox',
+        'dropdown'    => 'listbox',
+        'multiselect' => 'listbox-multiple',
+        'checkboxes'  => 'checkbox',
+        'textfield'   => 'text',
+        'string'      => 'text',
+        'int'         => 'number',
+        'integer'     => 'number',
+        'float'       => 'number',
+        'datetime'    => 'date',
+        'bool'        => 'checkbox',
+        'boolean'     => 'checkbox',
+        'wysiwyg'     => 'richtext',
+        'html'        => 'richtext',
+    ];
+
+    /**
+     * Warn when a TV's input type is one nothing can render.
+     *
+     * MODX stores whatever it is given and falls back to a plain text input
+     * when no renderer matches, with nothing logged and nothing returned to say
+     * so. This tool's own description warns that "radio is not a type and a TV
+     * given it silently renders as plain text", and then accepted `radio`
+     * without a word. It accepted `totalnonsense_xyz` too.
+     *
+     * A warning rather than a refusal, because extras register their own types
+     * and this cannot enumerate them. Two sources are consulted instead of one:
+     * the types MODX ships, and the types template variables on this site
+     * already use, which is how an extra's type earns recognition without being
+     * named here. MIGX's `migx` passes on any site that has a MIGX TV.
+     *
+     * What this deliberately does NOT do is ask MODX. modTemplateVar::
+     * getRenderDirectories('OnTVInputRenderList', 'input') is the authoritative
+     * answer and it is unusable here: it invokes the event, which runs every
+     * extra's plugin, and those plugins assume a Manager request. Ace's
+     * initialize() calls addLexiconTopic() on a lexicon that is null outside
+     * one, so asking the authoritative question fatals the entire tool call on
+     * any site with Ace installed. A warning must never be able to break the
+     * write it is commenting on.
+     *
+     * @param array<string,mixed> $saved normaliseElement() output, which renames
+     *                                      the `type` column to `input_type`
+     * @return string[]
+     */
+    private function inputTypeWarnings(modX $modx, string $typeKey, array $saved): array
+    {
+        if ($typeKey !== 'tv') {
+            return [];
+        }
+
+        // `input_type`, not `type`: this is the normalised summary, where
+        // normaliseElement() has already renamed the column. Reading `type`
+        // here silently found nothing and returned, which is a quiet way for a
+        // warning to never appear.
+        $type = strtolower(trim((string) ($saved['input_type'] ?? '')));
+        if ($type === '' || in_array($type, self::KNOWN_INPUT_TYPES, true)) {
+            return [];
+        }
+        // Excluding the row just written. It is in the table by now, so
+        // counting it would let any unknown type vouch for itself and the
+        // warning would never fire at all -- which is exactly what happened
+        // the first time this ran.
+        if (in_array($type, $this->inputTypesInUse($modx, (int) ($saved['id'] ?? 0)), true)) {
+            return [];
+        }
+
+        $hint = self::INPUT_TYPE_HINTS[$type] ?? null;
+
+        return [sprintf(
+            "input_type '%s' is not one MODX ships, and no template variable on this site uses "
+            . 'it. %sMODX stores it and falls back to a plain text input, with nothing logged and '
+            . 'no error anywhere, so this is easy to miss. The types MODX provides are: %s. If an '
+            . "extra on this site provides '%s', disregard this.",
+            $type,
+            $hint !== null ? sprintf("Did you mean '%s'? ", $hint) : '',
+            implode(', ', self::KNOWN_INPUT_TYPES),
+            $type
+        )];
+    }
+
+    /**
+     * Input types template variables on this site already use.
+     *
+     * One grouped query rather than loading every TV, and it answers the only
+     * question worth asking about an extra's type: whether anything already
+     * uses it. An extra that is installed but whose type is unused anywhere
+     * still draws the warning, which is why the warning says so rather than
+     * asserting the type is wrong.
+     *
+     * $excludeId keeps the row just saved out of the answer. Without it the
+     * check is circular: the TV carrying the unknown type is already stored by
+     * the time this runs, so the type is always "in use on this site".
+     *
+     * @return string[]
+     */
+    private function inputTypesInUse(modX $modx, int $excludeId = 0): array
+    {
+        $query = $modx->newQuery(modTemplateVar::class);
+        $query->select(['type']);
+        if ($excludeId > 0) {
+            $query->where(['id:!=' => $excludeId]);
+        }
+        $query->groupby('type');
+
+        $statement = $query->prepare();
+        if (!$statement || !$statement->execute()) {
+            // No opinion beats a wrong one: a query that will not run must not
+            // become a warning that the caller's type is unknown.
+            return self::KNOWN_INPUT_TYPES;
+        }
+
+        return array_map(
+            static fn($value) => strtolower(trim((string) $value)),
+            $statement->fetchAll(\PDO::FETCH_COLUMN) ?: []
+        );
     }
 
     /**

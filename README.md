@@ -2,7 +2,7 @@
 
 Exposes a MODX site over the [Model Context Protocol](https://modelcontextprotocol.io), so an AI agent can administer it the way a person would through the Manager.
 
-Requires PHP 8.1+ and MODX 3.0+. Ships no third-party PHP dependencies.
+Requires PHP 8.2+ and MODX 3.0+. Ships no third-party PHP dependencies.
 
 ## Why this exists
 
