@@ -16,6 +16,7 @@ use MODXMCP\Registry\Schema;
 final class ElementDeleteTool extends AbstractTool
 {
     use ElementSupport;
+    use ReferenceSupport;
 
     public function requiredScope(): string
     {
@@ -34,8 +35,12 @@ final class ElementDeleteTool extends AbstractTool
             'title'       => 'Delete an element',
             'description' => 'Permanently remove a chunk, snippet, template, template variable '
                 . 'or plugin. There is no recycle bin for elements, so this cannot be undone '
-                . 'from the Manager. Deleting a template that resources still use will leave '
-                . 'those resources without one.',
+                . 'from the Manager. MODX refuses to remove a template any resource still uses, '
+                . 'and a template variable any template still declares: reassign the resources '
+                . 'with modxmcp_resource_update, or detach the variable with '
+                . 'modxmcp_element_save, first. A chunk, snippet or template variable that '
+                . 'something still calls is removed anyway, but the result names the callers in '
+                . 'warnings, and removed.content carries the body so it can be recreated.',
             'inputSchema' => Schema::object([
                 'type' => Schema::enum('Element type.', $this->elementTypeKeys()),
                 'id'   => Schema::integer('Element id. Either this or name is required.'),
@@ -88,18 +93,46 @@ final class ElementDeleteTool extends AbstractTool
         }
 
         $warnings = [];
+
+        // MODX refuses to remove a template any resource still uses, and its
+        // own message names neither how many nor which. Refusing first turns
+        // that into something actionable, and rescues a count that could never
+        // be delivered: this was a warning appended to $out, which is built
+        // after the processor, and the processor throws.
         if ($typeKey === 'template') {
             $inUse = $modx->getCount(\MODX\Revolution\modResource::class, [
                 'template' => $elementId,
                 'deleted'  => 0,
             ]);
             if ($inUse > 0) {
-                $warnings[] = "{$inUse} resource(s) still use this template and will be left "
-                    . 'without a valid one.';
+                throw McpException::invalidParams(sprintf(
+                    '%d resource(s) still use this template, and MODX will not remove a template '
+                    . 'that is in use. Move them to another template with modxmcp_resource_update '
+                    . 'first. Nothing was deleted.',
+                    $inUse
+                ));
             }
         }
 
+        // Gathered before the removal, because afterwards the name is all that
+        // is left to search for and the caller has already lost the element.
+        $references = $this->referencesTo(
+            $modx,
+            (string) $element->get($type['name']),
+            $this->tagPatternsFor($typeKey, (string) $element->get($type['name'])),
+            $type['class'],
+            $elementId
+        );
+
         $this->runProcessor($modx, $type['processor'] . '/Remove', ['id' => $elementId]);
+
+        if ($references['total'] > 0) {
+            $warnings[] = $this->describeReferences(
+                $references,
+                $typeKey,
+                (string) $removed['name']
+            );
+        }
 
         $out = [
             'type'        => $typeKey,

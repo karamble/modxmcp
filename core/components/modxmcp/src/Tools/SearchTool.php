@@ -30,6 +30,9 @@ final class SearchTool extends AbstractTool
 {
     use ElementSupport;
     use ExcerptSupport;
+    // tagPatterns(), shared with element_delete's reference check so the two
+    // cannot drift into disagreeing about what calls an element.
+    use ReferenceSupport;
 
     /**
      * Resource columns worth searching, and safe to search.
@@ -123,26 +126,6 @@ final class SearchTool extends AbstractTool
         $result['resources'] = $resources;
 
         return $result;
-    }
-
-    /**
-     * The MODX tag forms that would call an element of this name.
-     *
-     * Which sigil an element uses depends on its type, and a caller asking "who
-     * calls productCard" rarely knows or cares. Searching all of them costs one
-     * OR per form and removes the guesswork.
-     *
-     * @return string[]
-     */
-    private function tagPatterns(string $name): array
-    {
-        return [
-            '[[$' . $name,   // chunk
-            '[[' . $name,    // snippet, cached
-            '[[!' . $name,   // snippet, uncached
-            '[[*' . $name,   // resource field or TV
-            '[[+' . $name,   // placeholder
-        ];
     }
 
     /**
