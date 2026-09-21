@@ -79,6 +79,9 @@ final class ToolRegistry
         }
 
         try {
+            // Inside the try, so a value of the wrong type is refused through
+            // the tool's own channel below, with nothing written.
+            $ignored = ArgumentGuard::check($tool->definition()['inputSchema'] ?? [], $arguments);
             $payload = $tool->call($modx, $arguments);
         } catch (McpException $e) {
             // A deliberate refusal is a tool-level failure, exactly like a
@@ -120,7 +123,30 @@ final class ToolRegistry
             ], true);
         }
 
-        return $this->frame($payload, false);
+        return $this->frame(self::withWarnings($payload, $ignored), false);
+    }
+
+    /**
+     * Add the guard's warnings to the result, where the tools put their own.
+     *
+     * Appended to an existing `warnings` list rather than beside it, so a caller
+     * has one place to look. A result that is not an object is left alone:
+     * there is nowhere to say it without changing its shape.
+     *
+     * @param array<mixed> $payload
+     * @param string[]     $warnings
+     * @return array<mixed>
+     */
+    private static function withWarnings(array $payload, array $warnings): array
+    {
+        if ($warnings === [] || ($payload !== [] && array_is_list($payload))) {
+            return $payload;
+        }
+
+        $existing = $payload['warnings'] ?? [];
+        $payload['warnings'] = array_merge(is_array($existing) ? array_values($existing) : [$existing], $warnings);
+
+        return $payload;
     }
 
     /**
