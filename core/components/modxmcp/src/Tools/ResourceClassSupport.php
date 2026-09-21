@@ -29,8 +29,11 @@ trait ResourceClassSupport
     /**
      * The class_key MODX itself creates.
      *
-     * A method rather than a trait constant on purpose: constants in traits are
-     * PHP 8.2, and this package supports 8.1.
+     * A method rather than a trait constant, though the reason has lapsed: the
+     * floor moved to 8.2 when it became clear that ExcerptSupport and
+     * ObjectSupport had been declaring trait constants since 1.0.0, so 8.1 was
+     * never a version this ran on. A constant would be allowed now. Left as a
+     * method because it works and changing it would buy nothing.
      */
     protected function defaultClassKey(): string
     {

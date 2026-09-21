@@ -16,7 +16,13 @@ use MODX\Revolution\modX;
 /** @var modX $modx */
 $modx = $object->xpdo;
 
-$minimumPhp  = '8.1.0';
+// 8.2, matching the manifest and the readme. This said 8.1.0 while the
+// package requires 8.2, which defeated the whole point of the gate: the
+// support traits declare constants, PHP allows those in a trait only from
+// 8.2, and on 8.1 those files fatal at include time. An 8.1 site would have
+// passed this check, installed cleanly, and then fatalled on first use --
+// exactly the sequence the docblock above says this exists to prevent.
+$minimumPhp  = '8.2.0';
 $minimumModx = '3.0.0';
 $ok          = true;
 
