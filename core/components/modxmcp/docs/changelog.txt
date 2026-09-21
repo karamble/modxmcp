@@ -580,10 +580,12 @@ Smaller
   was an unexplained {"shown":0,"readable":0}.
 - modxmcp_resource_duplicate echoes the template variable values the copy
   inherited, which its description had always promised.
-- modxmcp_cache_refresh clears modxmcp's own discovery and advisory caches on a
-  full clear. It never had, and their 300-second TTL was the only thing that
-  expired a stale class list, so installing an extra and then calling the tool
-  whose whole job is clearing caches still showed the old site.
+- modxmcp_cache_refresh names modxmcp's own discovery and advisory caches when
+  it clears them, and reports which it dropped. The 1.1.0 notes claimed it had
+  never cleared them at all; that was wrong, and AmaZili measured it. Both keys
+  live in MODX's `default` partition, which a full refresh() already includes,
+  so a clear with no partitions always took them. The change makes the intent
+  explicit and visible in the result rather than fixing a fault.
 - Media sources and package providers are permanently blocked from generic
   access. Both keep credentials inside a serialised properties column, where
   field-name masking cannot see them.

@@ -15,12 +15,20 @@ use MODXMCP\Registry\Schema;
  * It matters after changes made outside the processor path, such as editing a
  * static element's file on disk or altering settings directly.
  *
- * It also drops modxmcp's own two caches, which are not MODX partitions and so
- * are invisible to cacheManager->refresh(). Both PackageScanner and
- * AdvisoryCollector had a forget() that nothing called, which left the 300s TTL
- * as the only thing that ever expired a stale class list: you could install an
- * extra, call the tool whose whole job is clearing caches, and still not see
- * the extra in schema_list.
+ * It also drops modxmcp's own two caches explicitly, by name, and this comment
+ * used to claim they were "invisible to cacheManager->refresh()". They are not.
+ * Both live under keys in MODX's `default` partition, and refresh() called with
+ * no providers builds a list that includes 'default' => [], so a full clear
+ * already took them. Measured on 3.2.4-pl: after a scan both files are present;
+ * refresh(['resource' => []]) leaves them; refresh() removes them, with
+ * forget() never called.
+ *
+ * So the forget() calls below are explicitness rather than repair. They say
+ * which caches this tool means to drop instead of relying on where a cache key
+ * happens to sit, and the result names them, which is the part a caller can
+ * act on. Thanks to AmaZili for measuring the original claim and finding it
+ * wrong -- it had been asserted from reading the code and never tested against
+ * a running site.
  */
 final class CacheRefreshTool extends AbstractTool
 {
@@ -48,8 +56,20 @@ final class CacheRefreshTool extends AbstractTool
                 . 'modxmcp_schema_list or modxmcp_site_info still describes the site as it was.',
             'inputSchema' => Schema::object([
                 'partitions' => Schema::arrayOf(
-                    'Cache partitions to clear. Omit to clear everything.',
-                    Schema::enum('Partition', ['db', 'context_settings', 'resource', 'system_settings', 'scripts'])
+                    'Cache partitions to clear. Omit to clear everything, which is usually what '
+                    . 'you want. modxmcp\'s own discovery and advisory caches sit in the '
+                    . 'default partition, so naming partitions without it keeps them.',
+                    // Every partition modCacheManager::refresh() knows, taken
+                    // from the list it builds for itself when given none. The
+                    // set used to be a subset of five, which cost nothing while
+                    // nothing validated it; now that the enum is enforced, an
+                    // omission here is a partition a caller can no longer
+                    // clear, so the two lists have to agree.
+                    Schema::enum('Partition', [
+                        'auto_publish', 'system_settings', 'context_settings', 'namespaces',
+                        'db', 'media_sources', 'lexicon_topics', 'scripts', 'default',
+                        'resource', 'menu',
+                    ])
                 ),
             ]),
         ];
