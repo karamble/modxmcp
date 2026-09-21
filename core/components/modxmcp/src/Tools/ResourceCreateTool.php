@@ -3,6 +3,7 @@
 namespace MODXMCP\Tools;
 
 use MODX\Revolution\modX;
+use MODXMCP\Protocol\McpException;
 use MODXMCP\Registry\Schema;
 
 /**
@@ -57,6 +58,9 @@ final class ResourceCreateTool extends AbstractTool
                 'description' => Schema::string('Description.'),
                 'introtext'   => Schema::string('Summary or excerpt.'),
                 'context'     => Schema::string('Context key.', 'web'),
+                'context_key' => Schema::string('Same as context, under the name '
+                    . 'modxmcp_resource_get returns it. Give either; if both are given they '
+                    . 'must agree.'),
                 'published'   => Schema::boolean('Publish immediately.', false),
                 'hidemenu'    => Schema::boolean('Hide from menus.', false),
                 'show_in_tree' => Schema::boolean('Show in the resource tree. Set false for children of a Collections container.', true),
@@ -83,10 +87,24 @@ final class ResourceCreateTool extends AbstractTool
         // Resolved before anything else so a bad class_key fails before the write.
         $classKey = $this->resolveClassKey($modx, $this->arg($arguments, 'class_key'));
 
+        // resource_get answers with context_key, so a caller that reads a
+        // resource and creates a sibling from it passes that name. Ignoring it
+        // put the new resource in 'web' while the caller believed it had chosen.
+        $context    = $this->arg($arguments, 'context');
+        $contextKey = $this->arg($arguments, 'context_key');
+        if ($context !== null && $contextKey !== null && (string) $context !== (string) $contextKey) {
+            throw McpException::invalidParams(sprintf(
+                "context '%s' and context_key '%s' disagree. They name the same thing: give one. "
+                . 'Nothing was written.',
+                $context,
+                $contextKey
+            ));
+        }
+
         $properties = [
             'pagetitle'   => (string) $this->requireArg($arguments, 'pagetitle'),
             'parent'      => $parent,
-            'context_key' => (string) $this->arg($arguments, 'context', 'web'),
+            'context_key' => (string) ($context ?? $contextKey ?? 'web'),
             'published'   => !empty($arguments['published']) ? 1 : 0,
             'hidemenu'    => !empty($arguments['hidemenu']) ? 1 : 0,
             'menuindex'   => (int) $this->arg($arguments, 'menuindex', 0),
