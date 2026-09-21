@@ -56,7 +56,9 @@ final class ResourceCreateTool extends AbstractTool
                 'longtitle'   => Schema::string('Long title.'),
                 'description' => Schema::string('Description.'),
                 'introtext'   => Schema::string('Summary or excerpt.'),
-                'context'     => Schema::string('Context key.', 'web'),
+                'context_key' => Schema::string(
+                    'Context key, as every read of a resource reports it.', 'web'),
+                'context'     => Schema::string('Older name for context_key, still accepted.'),
                 'published'   => Schema::boolean('Publish immediately.', false),
                 'hidemenu'    => Schema::boolean('Hide from menus.', false),
                 'show_in_tree' => Schema::boolean('Show in the resource tree. Set false for children of a Collections container.', true),
@@ -86,7 +88,7 @@ final class ResourceCreateTool extends AbstractTool
         $properties = [
             'pagetitle'   => (string) $this->requireArg($arguments, 'pagetitle'),
             'parent'      => $parent,
-            'context_key' => (string) $this->arg($arguments, 'context', 'web'),
+            'context_key' => (string) $this->renamedArg($arguments, 'context_key', 'context', 'web'),
             'published'   => !empty($arguments['published']) ? 1 : 0,
             'hidemenu'    => !empty($arguments['hidemenu']) ? 1 : 0,
             'menuindex'   => (int) $this->arg($arguments, 'menuindex', 0),

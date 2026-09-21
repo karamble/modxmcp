@@ -34,7 +34,8 @@ final class CollectionsContainersTool extends AbstractTool
                 . 'show_in_tree=false and an explicit menuindex, or they disappear from the '
                 . 'Collections grid even though they exist and are published.',
             'inputSchema' => Schema::object([
-                'context' => Schema::string('Context key. Omit for all contexts.'),
+                'context_key' => Schema::string('Context key. Omit for all contexts.'),
+                'context' => Schema::string('Older name for context_key, still accepted.'),
             ]),
         ];
     }
@@ -44,7 +45,10 @@ final class CollectionsContainersTool extends AbstractTool
         // The listing, the predicate and the rule wording all live in
         // CollectionsSupport, so this tool and the resource warnings cannot
         // drift apart on what counts as a container.
-        $containers = $this->collectionsContainers($modx, $this->arg($arguments, 'context'));
+        $containers = $this->collectionsContainers(
+            $modx,
+            $this->renamedArg($arguments, 'context_key', 'context')
+        );
 
         return [
             'containers' => $containers,

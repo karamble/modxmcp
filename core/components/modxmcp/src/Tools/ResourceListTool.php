@@ -30,7 +30,9 @@ final class ResourceListTool extends AbstractTool
                 . 'content and template variables of one.',
             'inputSchema' => Schema::object([
                 'parent'      => Schema::integer('Only children of this resource id. Omit for any parent; use 0 for top level.'),
-                'context'     => Schema::string('Context key, e.g. "web". Omit for all contexts.'),
+                'context_key' => Schema::string(
+                    'Context key, e.g. "web". Omit for all contexts.'),
+                'context'     => Schema::string('Older name for context_key, still accepted.'),
                 'search'      => Schema::string('Match against pagetitle, alias and longtitle.'),
                 'published'   => Schema::boolean('Filter by published state. Omit for both.'),
                 'include_deleted' => Schema::boolean('Include resources in the recycle bin.', false),
@@ -60,7 +62,7 @@ final class ResourceListTool extends AbstractTool
         if (($parent = $this->arg($arguments, 'parent')) !== null) {
             $query->where(['parent' => (int) $parent]);
         }
-        if (($context = $this->arg($arguments, 'context')) !== null) {
+        if (($context = $this->renamedArg($arguments, 'context_key', 'context')) !== null) {
             $query->where(['context_key' => (string) $context]);
         }
         if (array_key_exists('published', $arguments) && $arguments['published'] !== null) {

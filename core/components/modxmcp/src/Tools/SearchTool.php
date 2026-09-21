@@ -74,7 +74,8 @@ final class SearchTool extends AbstractTool
                     'Element types to search. Omit for all of them.',
                     Schema::enum('Element type', $this->elementTypeKeys())),
                 'case_sensitive' => Schema::boolean('Match case exactly.', false),
-                'context' => Schema::string('Restrict resources to one context key.'),
+                'context_key' => Schema::string('Restrict resources to one context key.'),
+                'context' => Schema::string('Older name for context_key, still accepted.'),
                 'limit'   => Schema::integer('Maximum matching items per kind.', 25),
             ], ['q']),
         ];
@@ -116,7 +117,7 @@ final class SearchTool extends AbstractTool
                 $q,
                 $limit,
                 $caseSensitive,
-                $this->arg($arguments, 'context')
+                $this->renamedArg($arguments, 'context_key', 'context')
             );
         }
 

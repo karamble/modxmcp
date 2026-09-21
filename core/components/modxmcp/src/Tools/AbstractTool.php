@@ -120,6 +120,45 @@ abstract class AbstractTool implements ToolInterface
     }
 
     /**
+     * Read an argument that has been renamed, accepting the older name too.
+     *
+     * The read half of this surface returns MODX's own column names, and a
+     * caller reading a resource and reusing its fields to make another sends
+     * back what it was given. Where an argument was once spelled differently
+     * from the field -- `context` against the `context_key` every read
+     * returns -- that round trip silently dropped the value and the write
+     * landed on the default.
+     *
+     * Both names are declared in the schema, so neither is an unknown key, and
+     * the current one wins. Sending both is refused rather than resolved: they
+     * mean the same thing, so a caller that sent two has one of them wrong and
+     * would rather be told than have a coin tossed.
+     *
+     * @param array<string,mixed> $arguments
+     * @return mixed
+     * @throws McpException
+     */
+    protected function renamedArg(array $arguments, string $current, string $older, $default = null)
+    {
+        $new = $this->arg($arguments, $current);
+        $old = $this->arg($arguments, $older);
+
+        if ($new !== null && $old !== null && (string) $new !== (string) $old) {
+            throw McpException::invalidParams(sprintf(
+                "Both %s and %s were given, with different values ('%s' and '%s'). They are two "
+                . 'names for the same thing; %s is the current one. Nothing was written.',
+                $current,
+                $older,
+                (string) $new,
+                (string) $old,
+                $current
+            ));
+        }
+
+        return $new ?? $old ?? $default;
+    }
+
+    /**
      * @param array<string,mixed> $arguments
      * @throws McpException
      */

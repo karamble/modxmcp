@@ -79,6 +79,16 @@ final class ToolRegistry
         }
 
         try {
+            // Against the schema the tool already declares. Nothing read it
+            // back before, so an unknown key was accepted and dropped and a
+            // value of the wrong type was cast -- and `(int)` on an array is 1,
+            // which on a stock install is the site's start page.
+            $arguments = Arguments::validate(
+                $name,
+                $tool->definition()['inputSchema'] ?? [],
+                $arguments
+            );
+
             $payload = $tool->call($modx, $arguments);
         } catch (McpException $e) {
             // A deliberate refusal is a tool-level failure, exactly like a

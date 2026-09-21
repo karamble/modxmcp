@@ -31,7 +31,9 @@ final class ResourceGetTool extends AbstractTool
             'inputSchema' => Schema::object([
                 'id'          => Schema::integer('Resource id. Either this or alias is required.'),
                 'alias'       => Schema::string('Resource alias, if you do not have the id.'),
-                'context'     => Schema::string('Context to look in when using alias.', 'web'),
+                'context_key' => Schema::string(
+                    'Context to look in when using alias.', 'web'),
+                'context'     => Schema::string('Older name for context_key, still accepted.'),
                 'include_tvs' => Schema::boolean('Include template variable values.', true),
                 'include_tv_state' => Schema::boolean(
                     'For each template variable, also report whether its value is stored on this '
@@ -101,7 +103,7 @@ final class ResourceGetTool extends AbstractTool
         /** @var modResource|null $resource */
         $resource = $modx->getObject(modResource::class, [
             'alias'       => (string) $alias,
-            'context_key' => (string) $this->arg($arguments, 'context', 'web'),
+            'context_key' => (string) $this->renamedArg($arguments, 'context_key', 'context', 'web'),
         ]);
         if (!$resource) {
             throw McpException::invalidParams("No resource with alias '{$alias}'");

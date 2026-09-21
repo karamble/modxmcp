@@ -44,7 +44,9 @@ final class SeoRedirectTool extends AbstractTool
                 'new_url'       => Schema::string('Target path, or a resource id to resolve.'),
                 'resource_id'   => Schema::integer('Resource the redirect points at. Its current URI is used when new_url is omitted.'),
                 'redirect_type' => Schema::enum('HTTP status.', ['301', '302'], '301'),
-                'context'       => Schema::string('Context key.', 'web'),
+                'context_key'   => Schema::string(
+                    'Context key, as every read of a redirect reports it.', 'web'),
+                'context'     => Schema::string('Older name for context_key, still accepted.'),
                 'search'        => Schema::string('When listing, match against old_url and new_url.'),
                 'limit'         => Schema::integer('When listing, maximum rows.', 25),
             ]),
@@ -101,7 +103,7 @@ final class SeoRedirectTool extends AbstractTool
      */
     private function createRedirect(modX $modx, array $arguments, string $oldUrl): array
     {
-        $context    = (string) $this->arg($arguments, 'context', 'web');
+        $context    = (string) $this->renamedArg($arguments, 'context_key', 'context', 'web');
         $resourceId = (int) $this->arg($arguments, 'resource_id', 0);
         $newUrl     = $this->arg($arguments, 'new_url');
 

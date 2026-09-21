@@ -23,6 +23,12 @@ final class Schema
             'type'       => 'object',
             'properties' => $properties === [] ? new \stdClass() : $properties,
             'required'   => array_values($required),
+            // Declared, not merely enforced at run time. A client that
+            // validates arguments against the schema then refuses a misspelt
+            // key before a request exists, which is a better place to catch it
+            // than the server. map() sets this true for the opposite reason:
+            // its keys belong to the site, not to us.
+            'additionalProperties' => false,
         ];
     }
 
