@@ -32,6 +32,17 @@ $entries = [
         'xtype' => 'combo-boolean',
         'area'  => 'modxmcp.main',
     ],
+    'modxmcp.enable_standalone_endpoint' => [
+        // Off by default. The supported route is the snippet resource, which
+        // needs no web-accessible PHP; this optional connector file is surface
+        // a site should opt into rather than expose on every install. The gate
+        // in mcp.php is default-deny, so an absent or empty value keeps it
+        // closed. Distinct from modxmcp.enabled, which is the global kill
+        // switch for both routes.
+        'value' => '0',
+        'xtype' => 'combo-boolean',
+        'area'  => 'modxmcp.main',
+    ],
     'modxmcp.log_arguments' => [
         'value' => '0',
         'xtype' => 'combo-boolean',

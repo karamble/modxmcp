@@ -69,6 +69,8 @@ $_lang['modxmcp.settings.generic_access']   = 'Generic object access';
 
 $_lang['modxmcp.set.enabled']               = 'Endpoint enabled';
 $_lang['modxmcp.set.enabled_desc']          = 'Turn the MCP endpoint off in a hurry. Access is granted by tokens, not by this switch: with no tokens issued, every request is rejected regardless.';
+$_lang['modxmcp.set.enable_standalone_endpoint'] = 'Enable the standalone endpoint (mcp.php)';
+$_lang['modxmcp.set.enable_standalone_endpoint_desc'] = 'Off by default. The supported route is the modxmcp snippet resource, which needs no web-accessible PHP. Turn this on only if you deliberately use assets/components/modxmcp/mcp.php; while off, that file returns 404. This is separate from the Endpoint enabled switch, which turns both routes off.';
 $_lang['modxmcp.set.log_arguments']         = 'Record tool arguments in the audit log';
 $_lang['modxmcp.set.log_arguments_desc']    = 'Off by default. Arguments can contain page content and other caller-supplied data.';
 $_lang['modxmcp.set.audit_retention_days']  = 'Audit retention (days)';

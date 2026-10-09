@@ -9,6 +9,10 @@
  * snippet route does, because MODX evaluates access policies only inside a
  * session it started itself.
  *
+ * Disabled by default. The system setting modxmcp.enable_standalone_endpoint
+ * must be Yes, or every request here returns 404; the snippet route is
+ * unaffected and always available.
+ *
  * If this returns 403, the site denies PHP execution in this directory. That
  * cannot be undone from a child .htaccess, because such rules also strip the
  * PHP handler and re-granting access would serve this file as source. Use the
@@ -57,4 +61,26 @@ require_once MODX_CORE_PATH . 'components/modxmcp/src/Runtime.php';
 \MODXMCP\Runtime::boot();
 
 $modx = \MODXMCP\Bootstrap::modx();
+
+// Disabled by default: this optional connector is surface a site opts into,
+// not something every install should expose. Default-deny -- an absent or
+// empty setting keeps it closed. Independent of the global modxmcp.enabled
+// kill switch (checked in Server::run for both routes) and of the snippet
+// route, which this never gates.
+if (!$modx->getOption('modxmcp.enable_standalone_endpoint', null, false)) {
+    http_response_code(404);
+    header('Content-Type: application/json');
+    echo json_encode([
+        'jsonrpc' => '2.0',
+        'id'      => null,
+        'error'   => [
+            'code'    => -32601,
+            'message' => 'The modxmcp standalone endpoint is disabled. The supported route is the '
+                . 'modxmcp snippet resource. To use this file, set the system setting '
+                . 'modxmcp.enable_standalone_endpoint to Yes.',
+        ],
+    ]);
+    exit;
+}
+
 \MODXMCP\Runtime::server($modx)->run();

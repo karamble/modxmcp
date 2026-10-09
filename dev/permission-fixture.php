@@ -303,8 +303,6 @@ foreach (['loadonly' => $loadOnly, 'editor' => $editor, 'editnoweb' => $editor] 
 // which is the whole point of it.
 grant($modx, modAccessContext::class, 'web', $groups['editor'], $loadView, null);
 
-grant($modx, modAccessContext::class, 'web', $groups['editor'], $loadView, null);
-
 $users = [
     'loadonly'  => makeUser($modx, PREFIX . 'loadonly', $groups['loadonly'], $member),
     'editor'    => makeUser($modx, PREFIX . 'editor', $groups['editor'], $member),

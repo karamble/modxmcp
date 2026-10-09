@@ -73,6 +73,13 @@ modxmcp ships nothing web-accessible, which means it also works on sites
 that deny PHP execution under assets/. Rename its alias if you want a
 different URL; do not change its content, template or cacheable flag.
 
+A standalone PHP endpoint, assets/components/modxmcp/mcp.php, exists for
+sites that would rather point a client at a conventional connector file.
+It ships DISABLED: until you set the modxmcp.enable_standalone_endpoint
+system setting to Yes it returns 404, so a site that only uses the
+resource route exposes no web-accessible PHP it did not choose. The
+resource route is always available regardless.
+
 
 PROTOCOL
 --------
@@ -245,6 +252,10 @@ SECURITY NOTES
   client IP is the proxy's. Do not set it if you are not behind a proxy:
   it would let callers forge the address in the audit log and defeat a
   token's IP allowlist.
+- The optional standalone endpoint assets/components/modxmcp/mcp.php ships
+  disabled and returns 404 until you set modxmcp.enable_standalone_endpoint.
+  Leave it off unless you deliberately use it, so no site exposes
+  web-accessible PHP it never chose; the resource route is unaffected.
 - The Manager page needs assets/components/modxmcp/connector.php to be
   executable. If your site denies PHP under assets/, the page will not load
   its grids. The endpoint is unaffected; manage tokens from the CLI.
