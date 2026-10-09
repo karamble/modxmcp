@@ -597,3 +597,114 @@ Smaller
 Nothing in this release changes any site's data, and the upgrade rewrites files
 only. Existing system settings, tokens, the audit log and the endpoint resource
 are all preserved.
+
+1.2.0-pl
+========
+A security release. An external report with a reproduction showed that the read
+tools checked the calling token's scope and nothing else: a token bound to a
+MODX user whose only policy on the manager context was Load Only could read
+every resource with its content, every chunk, snippet, template and template
+variable, and the full code of every plugin -- none of which that user can open
+in the Manager. The contract stated in the README and on ToolInterface said
+otherwise. It is now enforced, and mapping the fix turned up two more holes the
+report could not have seen. Confirmed fixed on MODX 3.2.3 and 3.2.4.
+
+Permissions
+- Every tool asks MODX for the permission its own Manager processor declares,
+  before it reads or writes anything, and refuses by name: view for
+  resource_list, resource_get and collections_containers (what Resource/Get and
+  GetList declare -- not view_document, which gates the Manager's page);
+  view_chunk, view_snippet, view_template, view_tv and view_plugin by type for
+  element_list, element_get and migx_describe; packages for updates; empty_cache
+  for cache_refresh; source_view for media_source_list; seosuite for
+  seo_redirect. The refusal names the permission and how to grant it.
+- A resource in a resource group, or an element in a category, carries an access
+  policy of its own. A single read of one the user may not view is refused;
+  lists leave it out and report how many with a hidden count; search leaves it
+  out silently, since counting it would reveal that something matched.
+- search asks the same permissions per kind, skips a kind the user may not read
+  and says so, and refuses only when nothing it was asked for remains. It does
+  not ask the Manager's search permission, which gates the title-search screen:
+  it reads only what the user could already open one at a time.
+- category_list requires no permission, because the Manager's own category list
+  declares none; it applies the per-row list policy instead. site_info keeps
+  answering for any bound user, since it is what tells an agent what it may do,
+  but it withholds templates without view_template and any advisory built from
+  data the user may not see, and reports a permissions map so refusals can be
+  predicted. schema_list and schema_describe stay open: they read model
+  metadata, not rows.
+- The write tools ask their processor's own permission check before the lookups
+  they make to prepare the call, so a refusal no longer names elements,
+  categories or files to a caller the processor was about to turn away. The
+  names come from MODX, never from this package.
+- Generic object access is unchanged except that an allowlisted resource or
+  element class is now held to the same permission the dedicated tools ask for,
+  so the allowlist cannot become a second way around them, and a policy-bearing
+  row is subject to its own save and remove policy.
+
+Session state
+- MODX evaluates an access policy only inside a session it started itself; in
+  any other state checkPolicy answers yes for every user, processors included.
+  The optional standalone route seeded $_SESSION on purpose so no session would
+  start, which put it in exactly that state: on that route no permission was
+  checked, reads or writes. Both routes now let MODX start a session and discard
+  it before any output, and a request on which MODX still would not evaluate
+  policies is refused with a 503 for a non-sudo user rather than served open.
+  This needs anonymous_sessions on, which is the default.
+
+Standalone endpoint
+- The standalone connector, assets/components/modxmcp/mcp.php, now ships
+  disabled behind the modxmcp.enable_standalone_endpoint system setting and
+  returns 404 until it is turned on. It was reachable on every install even on
+  sites that only use the snippet resource, which is web-accessible surface
+  nobody opted into. The snippet route is unaffected and always available.
+
+Manager connectors
+- The Manager page's own connector processors -- token create and revoke, audit
+  clear, settings get and update -- declared the settings permission but never
+  enforced it, because they extend MODX's base Processor, whose
+  checkPermissions() returns true. A logged-in Manager user without settings
+  could mint a token for any non-sudo user, revoke tokens, clear the audit log
+  and widen the allowlists through the connector. They now enforce it.
+
+Arguments
+- Tool arguments are validated against the inputSchema each tool already
+  publishes. An unknown key is refused with the accepted keys and a near-miss
+  suggestion, rather than accepted and dropped: resource_create took context
+  while every read returns context_key, so a caller reusing a resource's own
+  fields silently lost the value. A value of the wrong type is refused rather
+  than cast, because (int) on a non-empty array is 1 in PHP and resource 1 is
+  the site's start page, so an id of the wrong shape edited the home page and
+  reported success.
+
+Extension point
+- ToolRegistry::get() returns the tool registered under a name, and registering
+  a name that exists is documented as replacing it, so an extra that wraps a
+  built-in no longer needs reflection into a private property. A tool a plugin
+  registers remains responsible for its own MODX permission check; tools
+  extending AbstractTool inherit the helpers for it.
+
+Requirements
+- The pre-install validator now refuses PHP older than 8.2, matching the
+  manifest and the readme. 1.1.0's manifest already required 8.2 while its
+  validator still admitted 8.1, which defeated the check: the support traits
+  declare constants, which PHP allows in a trait only from 8.2, so an 8.1 site
+  would have installed and then fatalled on first use.
+
+Smaller
+- modxmcp_seo_redirect stores the full status line SeoSuite serves
+  ("HTTP/1.1 301 Moved Permanently"), not the bare "301" it stored before. The
+  bare code is not a header line and produced a 500 on at least one stack, so no
+  redirect this tool created ever redirected. Rows written by earlier releases
+  carry the bare code and can be found with redirect_type NOT LIKE 'HTTP/%'.
+- modxmcp_media_source_list applies the per-row list policy and no longer claims
+  xPDO hides sources the user may not load; MODX exempts media sources from the
+  load policy, so it never did.
+
+Nothing in this release changes any site's data, and the upgrade rewrites files
+only. Existing system settings, tokens, the audit log and the endpoint resource
+are all preserved. Two behaviour changes to know about: the standalone route is
+disabled unless its setting is turned on, so a site that used mcp.php must
+enable it after upgrading; and a token bound to a user with a narrower policy
+than the agent's work now receives a refusal naming the permission where it
+previously received data, which is the fix.
