@@ -51,6 +51,9 @@ final class ResourceListTool extends AbstractTool
 
     public function call(modX $modx, array $arguments): array
     {
+        // What MODX's own Resource/GetList declares.
+        $this->requirePermission($modx, 'list resources', ['view']);
+
         $limit  = max(1, min(200, (int) $this->arg($arguments, 'limit', 25)));
         $offset = max(0, (int) $this->arg($arguments, 'offset', 0));
 
@@ -99,8 +102,13 @@ final class ResourceListTool extends AbstractTool
         }
         $query->limit($limit, $offset);
 
+        // xPDO has already dropped the rows this user may not load; the list
+        // policy is the one GetListProcessor applies on top, per row.
         $rows = [];
         foreach ($modx->getCollection(modResource::class, $query) as $resource) {
+            if (!$resource->checkPolicy('list')) {
+                continue;
+            }
             $rows[] = $this->pick($resource->toArray(), $this->resourceFields());
         }
 
@@ -110,7 +118,7 @@ final class ResourceListTool extends AbstractTool
             'offset'    => $offset,
             'returned'  => count($rows),
             'resources' => $rows,
-        ];
+        ] + $this->hiddenRows($limit, $offset, $total, count($rows), 'resource(s)');
     }
 
     /**

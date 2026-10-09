@@ -5,8 +5,9 @@
  * OPTIONAL. The supported route is the modxmcp snippet in a dedicated resource,
  * which needs no web-accessible PHP and therefore survives installs that deny
  * PHP under assets/. This file exists for sites that would rather have a
- * conventional connector, and it skips the session teardown the snippet route
- * has to perform.
+ * conventional connector. It starts and discards a session exactly as the
+ * snippet route does, because MODX evaluates access policies only inside a
+ * session it started itself.
  *
  * If this returns 403, the site denies PHP execution in this directory. That
  * cannot be undone from a child .htaccess, because such rules also strip the
@@ -20,9 +21,10 @@
 
 declare(strict_types=1);
 
-// Seeded before any MODX code so MODX reports SESSION_STATE_EXTERNAL and never
-// starts a session at all on this route.
-$_SESSION = $_SESSION ?? [];
+// $_SESSION must not be touched before MODX starts: a seeded $_SESSION makes
+// MODX report SESSION_STATE_EXTERNAL, and in that state it answers yes to every
+// permission check. Bootstrap::modx() lets MODX start a session and then
+// discards it (Bootstrap::settleSession()).
 
 // Walked rather than hardcoded, so the file can be relocated.
 $configCore = null;

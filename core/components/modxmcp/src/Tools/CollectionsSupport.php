@@ -64,9 +64,14 @@ trait CollectionsSupport
     /**
      * Containers on this site, with how many children each holds.
      *
+     * $keep, when given, decides per container whether it is reported; the
+     * tool passes the bound user's list policy. The advisory passes nothing:
+     * its result is cached for every token alike.
+     *
+     * @param callable(modResource):bool|null $keep
      * @return array<int,array<string,mixed>>
      */
-    protected function collectionsContainers(modX $modx, ?string $context = null): array
+    protected function collectionsContainers(modX $modx, ?string $context = null, ?callable $keep = null): array
     {
         $query = $modx->newQuery(modResource::class);
         $query->where(array_merge(['deleted' => 0], $this->collectionsCriteria()));
@@ -77,6 +82,9 @@ trait CollectionsSupport
 
         $containers = [];
         foreach ($modx->getIterator(modResource::class, $query) as $resource) {
+            if ($keep !== null && !$keep($resource)) {
+                continue;
+            }
             $id = (int) $resource->get('id');
             $containers[] = [
                 'id'          => $id,

@@ -10,7 +10,7 @@ Tools that edit MODX by saving xPDO objects directly produce content that looks 
 
 Every content write in modxmcp goes through a MODX processor instead, which is the same code path the Manager uses. Extras see the change and react to it.
 
-Two paths deliberately do not, because MODX ships no processor for them: generic object access (`modxmcp_object_save`, `modxmcp_object_delete`) and SeoSuite redirects. Each says so in its own response rather than leaving you to find out, and generic object access is off until an administrator allowlists a class.
+Two paths deliberately do not, because MODX ships no processor for them: generic object access (`modxmcp_object_save`, `modxmcp_object_delete`) and SeoSuite redirects, which are written directly and gated on SeoSuite's own `seosuite` permission. Each says so in its own response rather than leaving you to find out, and generic object access is off until an administrator allowlists a class.
 
 ## Installing
 
@@ -24,11 +24,9 @@ The endpoint is live from the moment you install, but a fresh install has no tok
 
 1. **Components → modxmcp → Tokens → Create token.**
 
-   A token acts as a MODX user and can never do more than that user can do in the Manager. Pick the least privileged account that suffices; do not reach for an administrator out of habit.
+   A token acts as a MODX user and can never do more than that user can do in the Manager. Every tool asks MODX for the permission the Manager requires for the same action before it reads or writes anything, and a resource or element under a resource group or category policy is refused or left out of lists, as it is in the Manager. Which permission each tool asks for is listed under [Security notes](#security-notes). Pick the least privileged account that suffices; do not reach for an administrator out of habit. A token bound to a sudo user is limited by nothing but its scopes, as sudo is in the Manager.
 
-   **Important, and counterintuitive:** a user belonging to *no* user group is not a restricted user. MODX treats "no access policy" as unrestricted rather than as denied, so such a user holds every permission, including ones that do not exist. Creating a fresh account with no groups and binding a token to it produces the *most* privileged token possible, not the least.
-
-   modxmcp refuses to act as such a user and will reject the request with an explanation. Put the user in a user group with an access policy, and size that policy to what the agent actually needs.
+   A user belonging to *no* user group has no access policy on the manager context, and modxmcp cannot tell a deliberately locked-down account from a misconfigured one, so it refuses to bind either and rejects the request with an explanation. (MODX would deny such a user in any case, once policies are evaluated: the manager context carries access rules the user matches none of.) Put the user in a user group with an access policy, and size that policy to what the agent actually needs. With the stock policies, Load Only lets an agent call almost nothing, and Content Editor lets it read resources and templates and edit resources, but not read chunks, snippets, template variables or plugins.
 
    The token is shown once and stored hashed. It cannot be recovered.
 
@@ -116,12 +114,22 @@ So check the base path of the source you mean to use before writing the allowlis
 
 Beyond resources and elements, modxmcp can discover and read the data of any installed extra. Schema inspection works out of the box.
 
-Reading or writing actual rows is opt-in per class, via `modxmcp.read_class_allowlist` and `modxmcp.write_class_allowlist`. Both are empty by default, and this is deliberate: xPDO has no permission model, so unlike the resource and element tools there is no MODX permission check behind generic access. Those settings are the only control.
+Reading or writing actual rows is opt-in per class, via `modxmcp.read_class_allowlist` and `modxmcp.write_class_allowlist`. Both are empty by default, and this is deliberate: xPDO has no permission model, so generic access has no MODX permission check of its own, and those settings are its main control. Two things still apply on top. A resource or element class on the read list is held to the same Manager permission the dedicated tools ask for, so the allowlist cannot become a second way around them. And a row that carries an access policy of its own, such as a resource in a resource group, is subject to it on read, save and delete, as in the Manager.
 
 Some classes can never be reached through generic access, whatever the settings say: users, sessions, access-control rules, system settings, package providers, media sources, and modxmcp's own tokens and audit log. Fields that look like secrets are masked on read, and where that is not enough the class is blocked outright — a media source keeps its S3 or FTP credentials inside one serialised column, which field-name masking cannot see into. Media sources are instead readable through `media_source_list`, which returns everything about them except those credentials.
 
 ## Security notes
 
+- Every tool asks MODX for the permission the Manager requires for the same action, before reading or writing anything, and a refusal names the permission and how to grant it:
+  - resources (`resource_list`, `resource_get`, `collections_containers`): `view`, which is what MODX's own resource processors declare. The Manager's resource page additionally requires `view_document`.
+  - elements (`element_list`, `element_get`): `view_chunk`, `view_snippet`, `view_template`, `view_tv` or `view_plugin`, by type. `migx_describe` asks `view_tv`.
+  - `search` asks the same names for whatever it covers, skips a kind the user may not read and says so, and refuses only when nothing that was asked for remains. It deliberately does not ask the Manager's `search` permission, which gates the title search screen and is not in the stock Content Editor policy: it reads only what the user could already open one at a time.
+  - `updates`: `packages`, as the Manager's package grid. The Updates dashboard widget is gated on `workspaces` instead, so an operator can hold one without the other.
+  - `media_source_list`: `source_view`. `cache_refresh`: `empty_cache`. `seo_redirect`: `seosuite`.
+  - the write tools ask their MODX processor's own check first, so the names are MODX's own. `resource_delete` asks `delete_document` by name, because MODX's Resource/Delete processor does not check it until after it has looked the resource up.
+  - `category_list`, `schema_list` and `schema_describe` ask nothing: MODX's own category list declares no permission, and the schema tools read model metadata, not rows. `site_info` asks nothing either, since it is what tells an agent what it may do, but it withholds templates and any advisory built from data the user may not see, and reports a `permissions` map so refusals can be predicted.
+- Resources and elements can carry access policies of their own, through resource groups and element categories. A single read of one the user may not view is refused; lists leave such rows out and report how many with `hidden`; search leaves them out silently, since counting them would reveal that something matched.
+- MODX evaluates access policies only inside a session it started itself; in any other state every permission check answers yes. modxmcp lets MODX start a session on every request, on both routes, and discards it before responding, so no cookie is issued. A request on which MODX would still not evaluate policies is refused for a non-sudo token rather than served without them.
 - Every call is recorded in the audit log, rejected calls included.
 - Tokens support expiry and an IP allowlist.
 - Requests must carry a valid token; there is no anonymous access.
@@ -136,7 +144,7 @@ The endpoint resource is also left in place. Delete it manually.
 
 ## Developing
 
-`dev/README-deploy.md` covers deploying a working tree to a site over SSH, building the transport package, and testing against a live endpoint. Third-party extras can contribute their own tools through the `OnMCPRegisterTools` event; a failing plugin degrades to its tools being absent, never to a dead endpoint.
+`dev/README-deploy.md` covers deploying a working tree to a site over SSH, building the transport package, and testing against a live endpoint. Third-party extras can contribute their own tools through the `OnMCPRegisterTools` event; a failing plugin degrades to its tools being absent, never to a dead endpoint. A tool a plugin registers is responsible for its own MODX permission check, as a processor is: the registry checks only the token's scope. Tools extending `AbstractTool` inherit `requirePermission()`, `requirePolicy()` and `requireProcessorPermission()` for it. Registering a name that already exists replaces that tool in place, and `ToolRegistry::get()` returns the instance to delegate to, so an extra can wrap a built-in tool with rules of its own.
 
 ## License
 

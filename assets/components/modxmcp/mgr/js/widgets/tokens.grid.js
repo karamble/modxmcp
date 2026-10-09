@@ -89,6 +89,8 @@ MODxMCP.createToken = function () {
                 xtype: 'fieldset',
                 title: _('modxmcp.token.scopes'),
                 items: [
+                    { xtype: 'displayfield', value: _('modxmcp.token.scopes_desc'),
+                      cls: 'desc-under' },
                     { xtype: 'xcheckbox', boxLabel: _('modxmcp.scope.read'),
                       id: 'modxmcp-scope-read', checked: true },
                     { xtype: 'xcheckbox', boxLabel: _('modxmcp.scope.write_content'),

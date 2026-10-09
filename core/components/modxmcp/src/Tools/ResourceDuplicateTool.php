@@ -76,6 +76,10 @@ final class ResourceDuplicateTool extends AbstractTool
     {
         $id = (int) $this->requireArg($arguments, 'id');
 
+        // Resource/Duplicate decides in an override (resource_duplicate) and
+        // declares no $permission, hence the name passed for the refusal.
+        $this->requireProcessorPermission($modx, 'Resource/Duplicate', ['id' => $id], 'resource_duplicate');
+
         /** @var modResource|null $source */
         $source = $modx->getObject(modResource::class, $id);
         if (!$source) {

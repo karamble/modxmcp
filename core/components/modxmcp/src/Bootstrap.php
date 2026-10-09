@@ -9,10 +9,13 @@ use MODXMCP\Protocol\McpException;
  * The two ways an MCP request can reach us.
  *
  * Snippet route (default): the endpoint is a MODX resource, so MODX is already
- * running by the time we get control, and it has already started a session.
+ * running by the time we get control, and has usually started a session.
  *
  * Standalone route: a PHP entry point that owns its own bootstrap, for installs
  * that prefer a connector file and do not deny PHP under assets/.
+ *
+ * Both routes end in settleSession(), because MODX evaluates access policies
+ * only inside a session it started itself.
  */
 final class Bootstrap
 {
@@ -34,6 +37,10 @@ final class Bootstrap
      */
     public static function tearDownSession(): void
     {
+        // Seeding $_SESSION is safe only after MODX has reached
+        // SESSION_STATE_INITIALIZED, which settleSession() sees to: before
+        // that, a set $_SESSION latches the state at EXTERNAL, and in that
+        // state every permission check answers yes.
         if (session_status() === PHP_SESSION_ACTIVE) {
             $_SESSION = [];
             @session_destroy();
@@ -45,18 +52,47 @@ final class Bootstrap
     }
 
     /**
+     * Let MODX start the session it needs to evaluate access policies, then
+     * undo it.
+     *
+     * modAccessibleObject::checkPolicy() consults sudo and the policy only
+     * while modX::getSessionState() is SESSION_STATE_INITIALIZED. In every
+     * other state it answers true, for every user and every permission,
+     * processors included. Only startSession() reaches INITIALIZED, and only
+     * from UNINITIALIZED; once reached, the state is never re-evaluated. So
+     * starting a session and destroying it at once leaves MODX evaluating
+     * policies for the rest of the request, with no cookie sent and no
+     * modx_session row written.
+     *
+     * Usually MODX has already started one during initialize(), and this only
+     * tears it down. It has not when anonymous_sessions is off and the request
+     * carries no session cookie. _initSession() still registered MODX's own
+     * session handler, name and cookie parameters in that case, so the session
+     * started here is the one MODX would have started.
+     *
+     * The standalone route used to seed $_SESSION before initialize() so that
+     * no session would start at all. That pinned the state at EXTERNAL, and
+     * every permission check on that route, read or write, answered yes.
+     */
+    public static function settleSession(modX $modx): void
+    {
+        if ($modx->getSessionState() === modX::SESSION_STATE_UNINITIALIZED) {
+            $modx->startSession();
+        }
+        self::tearDownSession();
+    }
+
+    /**
      * Initialize MODX for the standalone route.
      *
-     * $_SESSION is seeded first so MODX reports SESSION_STATE_EXTERNAL and never
-     * calls session_start() at all: on this route there is nothing to tear down.
+     * Nothing touches $_SESSION before initialize(): MODX has to start the
+     * session itself for its policies to be evaluated, and settleSession()
+     * discards it again before any output.
      *
      * @throws McpException
      */
     public static function modx(): modX
     {
-        if (!isset($_SESSION)) {
-            $_SESSION = [];
-        }
         if (!defined('MODX_API_MODE')) {
             define('MODX_API_MODE', true);
         }
@@ -72,6 +108,7 @@ final class Bootstrap
         $modx = new modX();
         $modx->initialize('mgr');
         $modx->setLogLevel(modX::LOG_LEVEL_ERROR);
+        self::settleSession($modx);
 
         return $modx;
     }

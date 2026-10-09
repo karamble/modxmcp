@@ -42,18 +42,42 @@ final class CollectionsContainersTool extends AbstractTool
 
     public function call(modX $modx, array $arguments): array
     {
+        // Containers are resources; listing them asks what Resource/GetList
+        // asks.
+        $this->requirePermission($modx, 'list resources', ['view']);
+
         // The listing, the predicate and the rule wording all live in
         // CollectionsSupport, so this tool and the resource warnings cannot
         // drift apart on what counts as a container.
+        $hidden     = 0;
         $containers = $this->collectionsContainers(
             $modx,
-            $this->renamedArg($arguments, 'context_key', 'context')
+            $this->renamedArg($arguments, 'context_key', 'context'),
+            function (modResource $resource) use (&$hidden): bool {
+                if ($resource->checkPolicy('list')) {
+                    return true;
+                }
+                $hidden++;
+                return false;
+            }
         );
 
-        return [
+        $out = [
             'containers' => $containers,
             'count'      => count($containers),
             'rule'       => $this->collectionsChildRule(),
         ];
+        if ($hidden > 0) {
+            $out['hidden'] = $hidden;
+            $out['note']   = sprintf(
+                '%d container%s not shown: an access policy gives the MODX user this token acts as '
+                . 'no list access to %s.',
+                $hidden,
+                $hidden === 1 ? ' is' : 's are',
+                $hidden === 1 ? 'it' : 'them'
+            );
+        }
+
+        return $out;
     }
 }

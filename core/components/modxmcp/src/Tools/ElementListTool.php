@@ -36,7 +36,12 @@ final class ElementListTool extends AbstractTool
 
     public function call(modX $modx, array $arguments): array
     {
-        $type   = $this->elementType((string) $this->requireArg($arguments, 'type'));
+        $typeKey = strtolower(trim((string) $this->requireArg($arguments, 'type')));
+        $type    = $this->elementType($typeKey);
+
+        // What MODX's own Element/<Type>/GetList declares.
+        $this->requirePermission($modx, 'list ' . $this->elementNoun($typeKey, true), [$type['permission']]);
+
         $limit  = max(1, min(500, (int) $this->arg($arguments, 'limit', 100)));
         $offset = max(0, (int) $this->arg($arguments, 'offset', 0));
 
@@ -53,18 +58,23 @@ final class ElementListTool extends AbstractTool
         $query->sortby($type['name'], 'ASC');
         $query->limit($limit, $offset);
 
+        // xPDO has already dropped what this user may not load under a
+        // category policy; the list policy is GetListProcessor's, per row.
         $rows = [];
         foreach ($modx->getCollection($type['class'], $query) as $element) {
+            if (!$element->checkPolicy('list')) {
+                continue;
+            }
             $rows[] = $this->normaliseElement($element->toArray(), $type, false);
         }
 
         return [
-            'type'     => strtolower((string) $arguments['type']),
+            'type'     => $typeKey,
             'total'    => $total,
             'limit'    => $limit,
             'offset'   => $offset,
             'returned' => count($rows),
             'elements' => $rows,
-        ];
+        ] + $this->hiddenRows($limit, $offset, $total, count($rows), $this->elementNoun($typeKey, true));
     }
 }

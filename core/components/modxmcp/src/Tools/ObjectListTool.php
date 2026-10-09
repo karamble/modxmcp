@@ -2,6 +2,7 @@
 
 namespace MODXMCP\Tools;
 
+use MODX\Revolution\modAccessibleObject;
 use MODX\Revolution\modX;
 use MODXMCP\Registry\Schema;
 
@@ -41,6 +42,9 @@ final class ObjectListTool extends AbstractTool
     public function call(modX $modx, array $arguments): array
     {
         $class  = $this->guardedClass($modx, (string) $this->requireArg($arguments, 'class'), 'read');
+        if (($permission = $this->curatedReadPermission($class)) !== null) {
+            $this->requirePermission($modx, 'read ' . $class . ' rows', [$permission]);
+        }
         $limit  = max(1, min(200, (int) $this->arg($arguments, 'limit', 25)));
         $offset = max(0, (int) $this->arg($arguments, 'offset', 0));
 
@@ -63,8 +67,13 @@ final class ObjectListTool extends AbstractTool
         }
         $query->limit($limit, $offset);
 
+        // A row carrying an access policy gets the list check GetListProcessor
+        // applies; xPDO has already dropped the ones the user may not load.
         $rows = [];
         foreach ($modx->getCollection($class, $query) as $object) {
+            if ($object instanceof modAccessibleObject && !$object->checkPolicy('list')) {
+                continue;
+            }
             $rows[] = $this->redactRow($modx, $object->toArray());
         }
 
@@ -75,6 +84,6 @@ final class ObjectListTool extends AbstractTool
             'offset'   => $offset,
             'returned' => count($rows),
             'objects'  => $rows,
-        ];
+        ] + $this->hiddenRows($limit, $offset, $total, count($rows), 'row(s)');
     }
 }

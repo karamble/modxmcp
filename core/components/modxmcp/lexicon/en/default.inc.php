@@ -17,7 +17,7 @@ $_lang['modxmcp.token.revoke_confirm'] = 'Revoke this token? Any client using it
 $_lang['modxmcp.token.name']          = 'Name';
 $_lang['modxmcp.token.prefix']        = 'Prefix';
 $_lang['modxmcp.token.user']          = 'Acts as';
-$_lang['modxmcp.token.user_desc']     = 'The MODX user this token acts as. The token can never do more than this user can do in the Manager, so choose the least privileged account that suffices.';
+$_lang['modxmcp.token.user_desc']     = 'The MODX user this token acts as. The token can never do more than this user can do in the Manager, so choose the least privileged account that suffices. A token bound to a sudo user is limited only by its scopes.';
 $_lang['modxmcp.token.scopes']        = 'Scopes';
 $_lang['modxmcp.token.scopes_desc']   = 'Checked in addition to the user\'s own permissions, never instead of them.';
 $_lang['modxmcp.token.active']        = 'Active';
@@ -80,7 +80,7 @@ $_lang['modxmcp.set.trusted_proxy_header_desc'] = 'Only set this if the site rea
 $_lang['modxmcp.set.site_notes']            = 'Site notes for connecting agents';
 $_lang['modxmcp.set.site_notes_desc']       = 'Free text returned by the site information call. Use it for local convention nothing can detect: which parent new articles go under, whether changes are live immediately, house style. Prose, not a rule the server enforces. Capped at 8 KB.';
 $_lang['modxmcp.set.read_class_allowlist']  = 'Readable classes';
-$_lang['modxmcp.set.read_class_allowlist_desc'] = 'Classes generic object reads may touch. Empty means none. Comma or space separated; a trailing * matches a prefix. Unlike the resource and element tools, this path has no MODX permission check behind it, so these lists are the only control.';
+$_lang['modxmcp.set.read_class_allowlist_desc'] = 'Classes generic object reads may touch. Empty means none. Comma or space separated; a trailing * matches a prefix. This path has no MODX permission check of its own, so these lists are its main control; a resource or element class listed here is still held to the Manager permission the dedicated tools ask for.';
 $_lang['modxmcp.set.write_class_allowlist'] = 'Writable classes';
 $_lang['modxmcp.set.write_class_allowlist_desc'] = 'Classes generic object writes may touch. Empty means none. Users, sessions, access-control rules, system settings, package providers, media sources and modxmcp own tables can never be reached whatever is listed here, and resources and elements can never be written this way because that would bypass the MODX processors.';
 

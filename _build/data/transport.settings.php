@@ -8,9 +8,9 @@
  * it is installed.
  *
  * Generic object access is the exception and ships closed. Both allowlists are
- * empty because, unlike everything else, that path has no MODX permission check
- * behind it, so a permissive default would expose whatever an installed extra
- * happens to store.
+ * empty because, unlike the curated tools, which ask MODX for the Manager's own
+ * permission, that path has no MODX permission check of its own, so a
+ * permissive default would expose whatever an installed extra happens to store.
  *
  * @var \MODX\Revolution\modX $modx
  * @var array $sources

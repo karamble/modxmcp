@@ -19,10 +19,13 @@ require_once MODX_CORE_PATH . 'components/modxmcp/src/Runtime.php';
 
 \MODXMCP\Runtime::boot();
 
-// MODX already started a session during initialize(): the front controller does
-// that whenever anonymous_sessions is on, long before a snippet runs. Undo it
-// before any output, while the queued Set-Cookie can still be dropped.
-\MODXMCP\Bootstrap::tearDownSession();
+// MODX usually started a session during initialize(): the front controller does
+// that whenever anonymous_sessions is on, long before a snippet runs. It must
+// have, because MODX evaluates access policies only inside a session it started
+// itself, so settle starts one if it did not (anonymous_sessions off, no cookie)
+// and then undoes it before any output, while the queued Set-Cookie can still
+// be dropped.
+\MODXMCP\Bootstrap::settleSession($modx);
 
 \MODXMCP\Runtime::server($modx)->run();
 

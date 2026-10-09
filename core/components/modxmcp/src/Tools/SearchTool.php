@@ -10,10 +10,10 @@ use MODXMCP\Registry\Schema;
 /**
  * Find text anywhere in the site's elements and content.
  *
- * MODX has no processor for this because the Manager has no screen for it, so
- * this is one of the few reads built directly on xPDO. That is not a departure
- * from the processor-first rule: that rule is about writes, and every read in
- * this extra already goes straight to xPDO.
+ * Built directly on xPDO, like every read in this extra: the processor-first
+ * rule is about writes. The Manager's own search screen is a different thing,
+ * a search over titles gated on the 'search' permission. This one reads bodies,
+ * so it is gated the way reading them one by one is gated (see call()).
  *
  * Elements and resources are searched together on purpose. "Who calls
  * [[$productCard]]?" is one question, and its answer is spread across template
@@ -21,10 +21,11 @@ use MODXMCP\Registry\Schema;
  * an editor pasted the tag by hand. Splitting it into two tools would mean a
  * caller that asks half the question and believes it has the answer.
  *
- * This exposes nothing new: modxmcp_element_get already returns snippet and
- * plugin PHP under the read scope, and modxmcp_resource_get already returns
- * content. Every query below is code-owned with bound values, so nothing the
- * caller sends reaches an operator or a column name.
+ * It exposes nothing a caller could not read one element or resource at a
+ * time: each kind is gated on the permission its Get processor declares, and
+ * each hit on the view policy its GetProcessor applies. Every query below is
+ * code-owned with bound values, so nothing the caller sends reaches an
+ * operator or a column name.
  */
 final class SearchTool extends AbstractTool
 {
@@ -104,13 +105,48 @@ final class SearchTool extends AbstractTool
         $elements  = [];
         $resources = [];
 
+        $searchResources = $where === 'both' || $where === 'resources';
+        $types           = [];
         if ($where === 'both' || $where === 'elements') {
-            $types    = $this->arg($arguments, 'types');
-            $types    = is_array($types) && $types !== [] ? $types : $this->elementTypeKeys();
-            $elements = $this->searchElements($modx, $needles, $types, $limit, $caseSensitive);
+            $types = $this->arg($arguments, 'types');
+            $types = is_array($types) && $types !== [] ? $types : $this->elementTypeKeys();
         }
 
-        if ($where === 'both' || $where === 'resources') {
+        // Per kind, the permission MODX's own Get processor for it declares. A
+        // kind the user may not read is skipped and reported, not refused, so
+        // one missing view_plugin does not cost a caller the templates it may
+        // read -- but if nothing asked for remains, the whole call is refused.
+        // Deliberately not the Manager's 'search' permission: that gates its
+        // title search screen, and Content Editor lacks it, while this reads
+        // what the user could already open one at a time.
+        $skipped  = [];
+        $readable = [];
+        foreach ($types as $typeKey) {
+            $key        = strtolower(trim((string) $typeKey));
+            $permission = $this->elementType($key)['permission'];
+            if ($modx->hasPermission($permission)) {
+                $readable[] = $typeKey;
+            } else {
+                $skipped[] = ['kind' => $this->elementNoun($key, true), 'permission' => $permission];
+            }
+        }
+        if ($searchResources && !$modx->hasPermission('view')) {
+            $searchResources = false;
+            $skipped[]       = ['kind' => 'resources', 'permission' => 'view'];
+        }
+        if ($readable === [] && !$searchResources) {
+            $this->requirePermission(
+                $modx,
+                'read the ' . $this->listing(array_column($skipped, 'kind')) . ' this search covers',
+                array_column($skipped, 'permission')
+            );
+        }
+
+        if ($readable !== []) {
+            $elements = $this->searchElements($modx, $needles, $readable, $limit, $caseSensitive);
+        }
+
+        if ($searchResources) {
             $resources = $this->searchResources(
                 $modx,
                 $needles,
@@ -125,6 +161,19 @@ final class SearchTool extends AbstractTool
             + array_sum(array_column($resources, 'match_count'));
         $result['elements']  = $elements;
         $result['resources'] = $resources;
+
+        // Only when something was skipped, so a caller who may read everything
+        // gets exactly the response it always did.
+        if ($skipped !== []) {
+            $result['skipped'] = $skipped;
+            $result['note']    = sprintf(
+                '%s %s not searched: the MODX user this token acts as lacks %s. An empty result '
+                . 'here does not mean there is no match.',
+                ucfirst($this->listing(array_column($skipped, 'kind'))),
+                count($skipped) === 1 ? 'was' : 'were',
+                $this->listing(array_column($skipped, 'permission'))
+            );
+        }
 
         return $result;
     }
@@ -147,6 +196,12 @@ final class SearchTool extends AbstractTool
             $type = $this->elementType((string) $typeKey);
 
             foreach ($modx->getIterator($type['class']) as $element) {
+                // The object policy, before the body is even read. Not counted
+                // anywhere: a count would tell the caller that something it may
+                // not see matches its query.
+                if (!$element->checkPolicy('view')) {
+                    continue;
+                }
                 $name = (string) $element->get($type['name']);
                 $body = (string) $element->get($type['content']);
 
@@ -222,6 +277,11 @@ final class SearchTool extends AbstractTool
 
         $hits = [];
         foreach ($modx->getIterator(modResource::class, $query) as $resource) {
+            // As for elements: an excerpt is a view, and a refused hit is not
+            // counted.
+            if (!$resource->checkPolicy('view')) {
+                continue;
+            }
             $matches = 0;
             $best    = ['excerpts' => [], 'truncated' => false];
             $matchedIn = [];

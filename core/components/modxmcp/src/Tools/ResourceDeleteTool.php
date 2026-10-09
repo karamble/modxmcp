@@ -45,6 +45,12 @@ final class ResourceDeleteTool extends AbstractTool
 
     public function call(modX $modx, array $arguments): array
     {
+        // Asked by name, not through the processor. Resource/Delete extends
+        // MODX's base Processor without overriding checkPermissions(), so its
+        // declared delete_document is never asked that way: its real gate is
+        // in initialize(), after the reads this tool makes for its summary.
+        $this->requirePermission($modx, 'delete a resource', ['delete_document']);
+
         $id = (int) $this->requireArg($arguments, 'id');
 
         /** @var modResource|null $resource */

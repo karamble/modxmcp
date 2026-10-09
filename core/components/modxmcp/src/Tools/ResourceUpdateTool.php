@@ -90,6 +90,10 @@ final class ResourceUpdateTool extends AbstractTool
     {
         $id = (int) $this->requireArg($arguments, 'id');
 
+        // Before the reads below, so a caller the processor would refuse learns
+        // nothing about the resource on the way.
+        $this->requireProcessorPermission($modx, 'Resource/Update', ['id' => $id]);
+
         /** @var modResource|null $resource */
         $resource = $modx->getObject(modResource::class, $id);
         if (!$resource) {

@@ -85,6 +85,14 @@ final class ResourceCreateTool extends AbstractTool
         // Resolved before anything else so a bad class_key fails before the write.
         $classKey = $this->resolveClassKey($modx, $this->arg($arguments, 'class_key'));
 
+        // Resource/Create decides by class_key (a weblink needs new_weblink, a
+        // document new_document), so its check is asked with what the real
+        // call will send.
+        $this->requireProcessorPermission($modx, 'Resource/Create', [
+            'class_key' => $classKey,
+            'parent'    => $parent,
+        ]);
+
         $properties = [
             'pagetitle'   => (string) $this->requireArg($arguments, 'pagetitle'),
             'parent'      => $parent,

@@ -78,7 +78,7 @@ final class PackageUpdateAdvisory implements AdvisoryInterface
                     . 'install or update: doing so runs third-party code and changes database '
                     . 'schema inside a web request.',
             ]
-        );
+        )->requiring('packages');
     }
 
     /**

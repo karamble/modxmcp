@@ -28,8 +28,13 @@ interface ToolInterface
 
     /**
      * Scope a token must hold to invoke this tool, e.g. "read", "write:content".
-     * Checked in addition to the bound MODX user's own permissions, never
-     * instead of them.
+     *
+     * The registry checks this before call(). It is in addition to the bound
+     * MODX user's own permissions, never instead of them -- but those are the
+     * tool's job, asked of MODX inside call() before anything is read or
+     * written, as every built-in tool does through AbstractTool's
+     * requirePermission(), requirePolicy() and requireProcessorPermission().
+     * A tool that does not ask is reachable by any token holding its scope.
      */
     public function requiredScope(): string;
 

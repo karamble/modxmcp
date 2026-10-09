@@ -20,6 +20,25 @@ final class SeoRedirectTool extends AbstractTool
 {
     private const CLASS_NAME = 'Sterc\\SeoSuite\\Model\\SeoSuiteRedirect';
 
+    /**
+     * What SeoSuite stores in redirect_type, keyed by the code a caller passes.
+     *
+     * SeoSuite's own form submits the label, not the code (extras.js offers
+     * ['301', 'HTTP/1.1 301 Moved Permanently'] with valueField 'label'), and
+     * its redirect plugin hands the stored value straight to
+     * modResponse::sendRedirect() as the responseCode, which calls header()
+     * with it. A bare "301" is not a header line. Measured on singularitybyte
+     * (PHP-FPM 8.4 behind Apache): the redirect answered HTTP 500, with
+     * proxy_fcgi logging "AH01070: Error parsing script headers". The
+     * status-line value answered 301 with the right Location. PHP's built-in
+     * server answered the bare code with a 302 carrying no Location at all, so
+     * no stack tried turned it into a working redirect.
+     */
+    private const STATUS_LINES = [
+        '301' => 'HTTP/1.1 301 Moved Permanently',
+        '302' => 'HTTP/1.1 302 Found',
+    ];
+
     public function requiredScope(): string
     {
         return 'write:content';
@@ -64,6 +83,25 @@ final class SeoRedirectTool extends AbstractTool
         }
 
         $oldUrl = $this->arg($arguments, 'old_url');
+
+        // The only permission SeoSuite enforces anywhere near redirects: its
+        // Manager controller requires it (Sterc\SeoSuite\Controllers\Base::
+        // checkPermissions()), and its redirect processors declare none.
+        //
+        // Who holds it depends on the site's history, as it does in the
+        // Manager. SeoSuite's installer adds it to every AdministratorTemplate
+        // policy, but on singularitybyte the core Administrator and Content
+        // Editor policies lack it while four custom policies carry it -- most
+        // likely a MODX upgrade rewrote the core policies from its own list
+        // afterwards. A non-sudo user on core policies alone is refused here
+        // exactly as SeoSuite's own screen refuses them.
+        $this->requirePermission(
+            $modx,
+            'open SeoSuite',
+            ['seosuite'],
+            $oldUrl === null ? 'Nothing was read.' : 'Nothing was written.'
+        );
+
         if ($oldUrl === null) {
             return $this->listRedirects($modx, $arguments);
         }
@@ -142,7 +180,7 @@ final class SeoRedirectTool extends AbstractTool
             'resource_id'   => $resourceId,
             'old_url'       => $oldUrl,
             'new_url'       => $newUrl,
-            'redirect_type' => (string) $this->arg($arguments, 'redirect_type', '301'),
+            'redirect_type' => self::STATUS_LINES[(string) $this->arg($arguments, 'redirect_type', '301')],
             'active'        => 1,
             'visits'        => 0,
             'editedon'      => date('Y-m-d H:i:s'),

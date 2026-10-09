@@ -27,12 +27,33 @@ use MODXMCP\Protocol\McpException;
 trait ElementSupport
 {
     /**
+     * How a refusal names an element type: "chunk", "template variables".
+     */
+    private function elementNoun(string $typeKey, bool $plural = false): string
+    {
+        $nouns = [
+            'chunk'    => 'chunk',
+            'snippet'  => 'snippet',
+            'template' => 'template',
+            'tv'       => 'template variable',
+            'plugin'   => 'plugin',
+        ];
+        $noun = $nouns[$typeKey] ?? $typeKey;
+
+        return $plural ? $noun . 's' : $noun;
+    }
+
+    /**
      * `fields` maps our argument name to the property the processor expects. They
      * are not the same, and often not the same as the column either: `elements`
      * is submitted as `els`, an element's default property set is `propdata`, and
      * a TV's input and output option blobs are not submitted as objects at all
      * (see explodePrefixed()). Centralising the mapping here is what keeps
      * ElementSaveTool a loop rather than a run of special cases.
+     *
+     * `permission` is what MODX's own Get and GetList processors for the type
+     * declare (Element/<Type>/Get.php and GetList.php), so reading an element
+     * here asks exactly what reading it in the Manager asks.
      *
      * @return array<string,array<string,mixed>>
      */
@@ -42,6 +63,7 @@ trait ElementSupport
             'chunk' => [
                 'class'     => modChunk::class,
                 'processor' => 'Element/Chunk',
+                'permission' => 'view_chunk',
                 'name'      => 'name',
                 'content'   => 'snippet',
                 'label'     => 'chunk (a reusable HTML fragment)',
@@ -50,6 +72,7 @@ trait ElementSupport
             'snippet' => [
                 'class'     => modSnippet::class,
                 'processor' => 'Element/Snippet',
+                'permission' => 'view_snippet',
                 'name'      => 'name',
                 'content'   => 'snippet',
                 'label'     => 'snippet (PHP executed on render)',
@@ -59,6 +82,7 @@ trait ElementSupport
             'template' => [
                 'class'     => modTemplate::class,
                 'processor' => 'Element/Template',
+                'permission' => 'view_template',
                 'name'      => 'templatename',
                 'content'   => 'content',
                 'label'     => 'template (the page shell)',
@@ -68,6 +92,7 @@ trait ElementSupport
             'tv' => [
                 'class'     => modTemplateVar::class,
                 'processor' => 'Element/TemplateVar',
+                'permission' => 'view_tv',
                 'name'      => 'name',
                 'content'   => 'default_text',
                 'label'     => 'template variable (a custom field on resources)',
@@ -83,6 +108,7 @@ trait ElementSupport
             'plugin' => [
                 'class'     => modPlugin::class,
                 'processor' => 'Element/Plugin',
+                'permission' => 'view_plugin',
                 'name'      => 'name',
                 'content'   => 'plugincode',
                 'label'     => 'plugin (PHP bound to system events)',
@@ -96,7 +122,7 @@ trait ElementSupport
     }
 
     /**
-     * @return array{class:string,processor:string,name:string,content:string,label:string}
+     * @return array{class:string,processor:string,permission:string,name:string,content:string,label:string}
      * @throws McpException
      */
     protected function elementType(string $type): array

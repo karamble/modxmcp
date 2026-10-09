@@ -16,7 +16,7 @@
  * `php dev/sb-pilot-setup.php teardown`.
  *
  * Run from the SB web root as the web user:
- *   cd /var/www/singularitybyte.com/web && sudo -u web44 php8.3 /tmp/sb-pilot-setup.php
+ *   cd /var/www/singularitybyte.com/web && sudo -u web44 /usr/bin/php8.4 /tmp/sb-pilot-setup.php
  */
 
 error_reporting(E_ALL & ~E_NOTICE & ~E_DEPRECATED & ~E_WARNING);

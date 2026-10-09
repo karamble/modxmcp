@@ -41,11 +41,18 @@ final class MigxDescribeTool extends AbstractTool
 
     public function call(modX $modx, array $arguments): array
     {
+        // A MIGX configuration is a TV's input properties, which the Manager
+        // shows only to a user who may view TVs.
+        $this->requirePermission($modx, 'view template variables', ['view_tv']);
+
         $name = $this->arg($arguments, 'tv');
 
         if ($name === null) {
             $all = [];
             foreach ($modx->getCollection(modTemplateVar::class, ['type' => 'migx']) as $tv) {
+                if (!$tv->checkPolicy('list')) {
+                    continue;
+                }
                 $all[] = [
                     'tv'      => $tv->get('name'),
                     'id'      => (int) $tv->get('id'),
@@ -64,6 +71,7 @@ final class MigxDescribeTool extends AbstractTool
             throw McpException::invalidParams(
                 "Template variable '{$name}' is of type '{$tv->get('type')}', not migx.");
         }
+        $this->requirePolicy($modx, $tv, 'view', "template variable '{$name}'");
 
         $properties = (array) $tv->get('input_properties');
         $tabs       = $this->resolveTabs($modx, $properties);

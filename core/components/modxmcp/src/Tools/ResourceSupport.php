@@ -52,10 +52,12 @@ trait ResourceSupport
      */
     protected function readTvs(modX $modx, modResource $resource): array
     {
+        // A read: only the TVs the resource form would show this user.
         return $this->readTvsForTemplate(
             $modx,
             (int) $resource->get('id'),
-            (int) $resource->get('template')
+            (int) $resource->get('template'),
+            true
         );
     }
 
@@ -69,7 +71,8 @@ trait ResourceSupport
         return $this->readTvState(
             $modx,
             (int) $resource->get('id'),
-            (int) $resource->get('template')
+            (int) $resource->get('template'),
+            true
         );
     }
 

@@ -68,6 +68,8 @@ final class CollectionsChildrenAdvisory implements AdvisoryInterface
                     . 'absent from the Collections grid',
                 'verify'  => 'modxmcp_collections_containers',
             ]
-        )->withExtra('collections', (new ExtraPresence($modx))->version('Collections'));
+        )->withExtra('collections', (new ExtraPresence($modx))->version('Collections'))
+            // Its evidence is container rows: resources.
+            ->requiring('view');
     }
 }

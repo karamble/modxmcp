@@ -50,9 +50,17 @@ final class CategoryListTool extends AbstractTool
             $criteria['category:LIKE'] = '%' . $search . '%';
         }
 
+        // No permission gate, deliberately: MODX's own Element/Category/GetList
+        // declares none. view_category belongs to fetching one category and to
+        // the element tree's root. What the list does apply is the per-row
+        // list policy, so a category under an access policy that refuses this
+        // user stays out, along with its element counts.
         $categories = [];
         foreach ($modx->getIterator(modCategory::class, $criteria) as $category) {
             /** @var modCategory $category */
+            if (!$category->checkPolicy('list')) {
+                continue;
+            }
             $id = (int) $category->get('id');
             $categories[] = [
                 'id'       => $id,

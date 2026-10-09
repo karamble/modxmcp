@@ -75,6 +75,13 @@ final class UpdatesTool extends AbstractTool
 
     public function call(modX $modx, array $arguments): array
     {
+        // What the Manager's package grid declares (Workspace/Packages/GetList).
+        // Asked here, on both paths, because neither runs a processor that
+        // would: the default path reads the dashboard cache and iterates
+        // packages directly, and SoftwareUpdate/GetList, which refresh runs,
+        // declares no permission at all.
+        $this->requirePermission($modx, 'see installed packages and their updates', ['packages']);
+
         $refresh = !empty($arguments['refresh']);
 
         $combined = $refresh

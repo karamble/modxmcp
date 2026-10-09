@@ -77,6 +77,10 @@ final class CacheRefreshTool extends AbstractTool
 
     public function call(modX $modx, array $arguments): array
     {
+        // The permission behind the Manager's Clear Cache. This runs no
+        // processor, so nothing else would ask it.
+        $this->requirePermission($modx, 'clear the cache', ['empty_cache']);
+
         $requested = $this->arg($arguments, 'partitions');
 
         $providers = [];

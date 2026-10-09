@@ -19,6 +19,17 @@ class ModxmcpAuditClearProcessor extends Processor
     public $languageTopics = ['modxmcp:default'];
     public $permission     = 'settings';
 
+    /**
+     * Enforce what $permission declares. This class extends MODX's base
+     * Processor, whose checkPermissions() returns true: only ModelProcessor
+     * reads $permission. Without this, any logged-in Manager user could run it
+     * through the connector, page or no page.
+     */
+    public function checkPermissions()
+    {
+        return $this->modx->hasPermission($this->permission);
+    }
+
     public function process()
     {
         Package::load($this->modx);

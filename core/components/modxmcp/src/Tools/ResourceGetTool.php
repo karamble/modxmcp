@@ -47,7 +47,16 @@ final class ResourceGetTool extends AbstractTool
 
     public function call(modX $modx, array $arguments): array
     {
+        // What MODX's own Resource/Get declares, before anything is looked up.
+        $this->requirePermission($modx, 'view a resource', ['view']);
+
         $resource = $this->locate($modx, $arguments);
+
+        // And the object policy its GetProcessor applies to the row: a resource
+        // in a resource group can refuse a user who holds 'view'. A row the
+        // user may not even load never reaches here -- locate() answers "No
+        // resource with id N" for it, as the Manager's own connector does.
+        $this->requirePolicy($modx, $resource, 'view', 'resource ' . $resource->get('id'));
 
         $row = $this->pick($resource->toArray(), array_merge($this->resourceFields(), [
             'introtext', 'menutitle', 'searchable', 'cacheable', 'richtext', 'template',

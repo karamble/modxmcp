@@ -135,6 +135,16 @@ final class ElementSaveTool extends AbstractTool
             $existing = $modx->getObject($type['class'], [$type['name'] => (string) $name]);
         }
 
+        // The processor is known once existence is. Ask it before the
+        // properties are built: building them resolves categories and templates
+        // by name, and those lookups would otherwise answer a caller the
+        // processor is about to refuse.
+        $this->requireProcessorPermission(
+            $modx,
+            $type['processor'] . ($existing ? '/Update' : '/Create'),
+            $existing ? ['id' => (int) $existing->get('id')] : []
+        );
+
         $properties = [];
         if ($existing) {
             // As with resources, these processors mirror a Manager form, so the

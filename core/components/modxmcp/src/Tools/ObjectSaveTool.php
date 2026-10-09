@@ -2,6 +2,7 @@
 
 namespace MODXMCP\Tools;
 
+use MODX\Revolution\modAccessibleObject;
 use MODX\Revolution\modX;
 use MODXMCP\Discovery\ClassGuard;
 use MODXMCP\Protocol\McpException;
@@ -81,6 +82,11 @@ final class ObjectSaveTool extends AbstractTool
             $object = $modx->getObject($class, $pk);
             if (!$object) {
                 throw McpException::invalidParams("No {$class} with primary key '{$pk}'");
+            }
+            // What UpdateProcessor checks. modAccessibleObject::save() only
+            // records a denial and saves anyway, so nothing else would stop it.
+            if ($object instanceof modAccessibleObject) {
+                $this->requirePolicy($modx, $object, 'save', "{$class} '{$pk}'");
             }
             $created = false;
         } else {

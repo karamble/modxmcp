@@ -57,6 +57,13 @@ final class ElementDeleteTool extends AbstractTool
         $id   = $this->arg($arguments, 'id');
         $name = $this->arg($arguments, 'name');
 
+        // Before the lookup and the template-use count that follow.
+        $this->requireProcessorPermission(
+            $modx,
+            $type['processor'] . '/Remove',
+            $id !== null ? ['id' => (int) $id] : []
+        );
+
         if ($id !== null) {
             $element = $modx->getObject($type['class'], (int) $id);
         } elseif ($name !== null) {

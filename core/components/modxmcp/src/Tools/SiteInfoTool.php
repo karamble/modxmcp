@@ -82,12 +82,21 @@ final class SiteInfoTool implements ToolInterface
             $contexts[] = $context->get('key');
         }
 
+        // Orientation stays open to any bound user -- it is what tells a
+        // caller what it may do -- but it must not hand over what the Manager
+        // gates. Listing templates is Element/Template/GetList's job, and that
+        // declares view_template.
+        $withheld  = [];
         $templates = [];
-        foreach ($modx->getIterator(modTemplate::class) as $template) {
-            $templates[] = [
-                'id'   => (int) $template->get('id'),
-                'name' => $template->get('templatename'),
-            ];
+        if ($modx->hasPermission('view_template')) {
+            foreach ($modx->getIterator(modTemplate::class) as $template) {
+                $templates[] = [
+                    'id'   => (int) $template->get('id'),
+                    'name' => $template->get('templatename'),
+                ];
+            }
+        } else {
+            $withheld['templates'] = 'view_template';
         }
 
         $extras = [];
@@ -99,8 +108,20 @@ final class SiteInfoTool implements ToolInterface
         }
         sort($extras);
 
+        // An advisory whose evidence the Manager gates says so in requires.
+        // The collected list is cached for every token alike, so the filter
+        // runs here, per caller, and the key is stripped before answering.
         $collector  = new AdvisoryCollector($modx);
-        $advisories = $collector->collect(!empty($arguments['refresh']));
+        $advisories = [];
+        foreach ($collector->collect(!empty($arguments['refresh'])) as $advisory) {
+            $needs = $advisory['requires'] ?? null;
+            unset($advisory['requires']);
+            if ($needs !== null && !$modx->hasPermission((string) $needs)) {
+                $withheld['advisories'][(string) ($advisory['id'] ?? '')] = (string) $needs;
+                continue;
+            }
+            $advisories[] = $advisory;
+        }
 
         // warnings stays a string[] and keeps carrying everything, because it is
         // the shape existing callers read. advisories is the machine-usable form
@@ -130,20 +151,52 @@ final class SiteInfoTool implements ToolInterface
             'advisories'   => $advisories,
             'notes'        => $this->operatorNotes($modx),
             'bound_user'   => $modx->user ? $modx->user->get('username') : null,
-            // Proof, on every call, that the session-free contract still holds.
+            // What the tools will ask MODX for, answered for this caller, so an
+            // agent can tell before its first refusal which calls will refuse.
+            'permissions'  => $this->permissionMap($modx, $extras),
+            // Proof, on every call, that the session contract holds.
             //
-            // cookieless is the signal that matters. modx_state is MODX's own
-            // cached flag and is deliberately NOT authoritative here: on the
-            // snippet route it still reads INITIALIZED(1) after teardown,
-            // because getSessionState() short-circuits on that value and never
-            // re-checks. An empty PHP session id and no Set-Cookie on the
-            // response are what actually establish the contract.
+            // modx_state must read 1 (INITIALIZED): that is the only state in
+            // which MODX evaluates access policies, and Server refuses a
+            // non-sudo token in any other. It stays 1 after the session is torn
+            // down, because getSessionState() never re-checks that value, which
+            // is exactly what keeps the policies evaluating. cookieless is the
+            // other half: an empty PHP session id and no Set-Cookie on the
+            // response are what show no session survived.
             'session' => [
                 'cookieless' => session_id() === '',
                 'php_sid'    => session_id(),
                 'modx_state' => $modx->getSessionState(),
             ],
+        ] + ($withheld !== [] ? ['withheld' => $withheld] : []);
+    }
+
+    /**
+     * The bound user's answer for every permission a tool asks for by name.
+     *
+     * The processor-backed write tools ask the processor itself, so their
+     * names are MODX's and not listed here; delete_document is, because
+     * resource_delete has to ask it explicitly.
+     *
+     * @param string[] $extras
+     * @return array<string,bool>
+     */
+    private function permissionMap(modX $modx, array $extras): array
+    {
+        $names = [
+            'view', 'view_document', 'view_chunk', 'view_snippet', 'view_template', 'view_tv',
+            'view_plugin', 'source_view', 'packages', 'empty_cache', 'delete_document',
         ];
+        if (in_array('seosuite', $extras, true)) {
+            $names[] = 'seosuite';
+        }
+
+        $map = [];
+        foreach ($names as $name) {
+            $map[$name] = $modx->hasPermission($name);
+        }
+
+        return $map;
     }
 
     /**

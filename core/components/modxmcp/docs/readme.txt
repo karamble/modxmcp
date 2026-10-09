@@ -22,7 +22,8 @@ it.
 
 Two paths deliberately do not, because MODX ships no processor for them:
 generic object access (modxmcp_object_save, modxmcp_object_delete) and
-SeoSuite redirects. Each says so in its own response rather than leaving you
+SeoSuite redirects, which are written directly and gated on SeoSuite's own
+seosuite permission. Each says so in its own response rather than leaving you
 to find out, and generic object access is off until an administrator
 allowlists a class.
 
@@ -41,19 +42,25 @@ kill switch if you ever need to shut the endpoint off in a hurry.
 1. Components > modxmcp > Tokens > Create token.
 
    A token acts as a MODX user and can never do more than that user can do
-   in the Manager. Pick the least privileged account that suffices; do not
-   reach for an administrator out of habit.
+   in the Manager. Every tool asks MODX for the permission the Manager
+   requires for the same action before it reads or writes anything, and a
+   resource or element under a resource group or category policy is refused
+   or left out of lists, as it is in the Manager. SECURITY NOTES below lists
+   which permission each tool asks for. Pick the least privileged account
+   that suffices; do not reach for an administrator out of habit. A token
+   bound to a sudo user is limited by nothing but its scopes, as sudo is in
+   the Manager.
 
-   IMPORTANT, and counterintuitive: a user belonging to NO user group is
-   not a restricted user. MODX treats "no access policy" as unrestricted
-   rather than as denied, so such a user holds every permission, including
-   ones that do not exist. Creating a fresh account with no groups and
-   binding a token to it produces the most privileged token possible, not
-   the least.
-
-   modxmcp refuses to act as such a user and will reject the request with
-   an explanation. Put the user in a user group with an access policy, and
-   size that policy to what the agent actually needs.
+   A user belonging to NO user group has no access policy on the manager
+   context, and modxmcp cannot tell a deliberately locked-down account from
+   a misconfigured one, so it refuses to bind either and rejects the request
+   with an explanation. (MODX would deny such a user in any case, once
+   policies are evaluated: the manager context carries access rules the user
+   matches none of.) Put the user in a user group with an access policy, and
+   size that policy to what the agent actually needs. With the stock
+   policies, Load Only lets an agent call almost nothing, and Content Editor
+   lets it read resources and templates and edit resources, but not read
+   chunks, snippets, template variables or plugins.
 
    The token is shown once and stored hashed. It cannot be recovered.
 
@@ -170,8 +177,13 @@ any installed extra. Schema inspection works out of the box.
 Reading or writing actual rows is opt-in per class, via
 modxmcp.read_class_allowlist and modxmcp.write_class_allowlist. Both are
 empty by default, and this is deliberate: xPDO has no permission model, so
-unlike the resource and element tools there is no MODX permission check
-behind generic access. Those settings are the only control.
+generic access has no MODX permission check of its own, and those settings
+are its main control. Two things still apply on top. A resource or element
+class on the read list is held to the same Manager permission the dedicated
+tools ask for, so the allowlist cannot become a second way around them. And
+a row that carries an access policy of its own, such as a resource in a
+resource group, is subject to it on read, save and delete, as in the
+Manager.
 
 Some classes can never be reached through generic access, whatever the
 settings say: users, sessions, access-control rules, system settings,
@@ -186,6 +198,46 @@ which returns everything about them except those credentials.
 SECURITY NOTES
 --------------
 
+- Every tool asks MODX for the permission the Manager requires for the
+  same action, before reading or writing anything, and a refusal names the
+  permission and how to grant it:
+    resources (resource_list, resource_get, collections_containers): view,
+      what MODX's own resource processors declare. The Manager's resource
+      page additionally requires view_document.
+    elements (element_list, element_get): view_chunk, view_snippet,
+      view_template, view_tv or view_plugin, by type. migx_describe asks
+      view_tv.
+    search: the same names for whatever it covers. It skips a kind the user
+      may not read and says so, and refuses only when nothing asked for
+      remains. It deliberately does not ask the Manager's search
+      permission, which gates the title search screen and is not in the
+      stock Content Editor policy.
+    updates: packages, as the Manager's package grid. The Updates dashboard
+      widget is gated on workspaces instead.
+    media_source_list: source_view. cache_refresh: empty_cache.
+      seo_redirect: seosuite.
+    write tools: their MODX processor's own check, asked first, so the
+      names are MODX's. resource_delete asks delete_document by name,
+      because Resource/Delete checks it only after looking the resource up.
+    category_list, schema_list, schema_describe and site_info ask nothing.
+      MODX's own category list declares no permission, the schema tools
+      read metadata, not rows, and site_info withholds templates and any
+      advisory built from data the user may not see, and reports a
+      permissions map so refusals can be predicted.
+- Resources and elements can carry access policies of their own, through
+  resource groups and element categories. A single read of one the user may
+  not view is refused; lists leave such rows out and report how many with
+  hidden; search leaves them out silently, since counting them would reveal
+  that something matched.
+- MODX evaluates access policies only inside a session it started itself; in
+  any other state every permission check answers yes. modxmcp lets MODX
+  start a session on every request, on both routes, and discards it before
+  responding, so no cookie is issued. A request on which MODX would still
+  not evaluate policies is refused for a non-sudo token rather than served
+  without them.
+- A tool another extra registers through OnMCPRegisterTools is responsible
+  for its own MODX permission check, as a processor is: the registry checks
+  only the token's scope.
 - Every call is recorded in the audit log, rejected calls included.
 - Tokens support expiry and an IP allowlist.
 - Requests must carry a valid token; there is no anonymous access.

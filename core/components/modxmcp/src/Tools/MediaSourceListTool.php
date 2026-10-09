@@ -36,11 +36,11 @@ use MODXMCP\Registry\Schema;
  *   into a check. This is the first read tool with a Manager-permission gate,
  *   which is worth naming the processor for so it does not look arbitrary.
  *
- *   checkPolicy('load'), which costs nothing because modMediaSource descends
- *   from modAccessibleSimpleObject: modAccessibleObject::loadCollection()
- *   applies it per row, so a source this user may not load is simply absent.
- *   That governs using a source, not seeing its configuration, which is why it
- *   is not a substitute for the permission above.
+ *   checkPolicy('list') per row, which MODX's own Source/GetList applies. Not
+ *   'load': modMediaSource::checkPolicy() answers true for 'load'
+ *   unconditionally, so no media source is ever dropped at load time. An
+ *   earlier version of this docblock said one was, and the hidden count it
+ *   explained could only ever have meant an uninstantiable class_key.
  */
 final class MediaSourceListTool extends AbstractTool
 {
@@ -84,13 +84,7 @@ final class MediaSourceListTool extends AbstractTool
         // MODX's own source listing is gated on this, and it is the screen that
         // shows base paths. Refused before anything is read, so the refusal
         // cannot be mistaken for an empty site.
-        if (!$modx->hasPermission('source_view')) {
-            throw McpException::forbidden(
-                'The MODX user this token acts as lacks the source_view permission, which is '
-                . 'what the Manager requires to list media sources. Grant it through the user '
-                . "group's access policy, or use a token bound to a user that has it. Nothing "
-                . 'was read.');
-        }
+        $this->requirePermission($modx, 'list media sources', ['source_view']);
 
         $search        = $this->arg($arguments, 'search');
         $includeRemote = !empty($arguments['include_remote']);
@@ -106,6 +100,9 @@ final class MediaSourceListTool extends AbstractTool
 
         $sources = [];
         foreach ($modx->getCollection($this->mediaSourceClass(), $criteria) as $source) {
+            if (!$source->checkPolicy('list')) {
+                continue;
+            }
             $row = $this->pick($source->toArray(), $this->sourceFields());
 
             $row['id']        = (int) ($row['id'] ?? 0);
@@ -135,10 +132,11 @@ final class MediaSourceListTool extends AbstractTool
 
         usort($sources, fn(array $a, array $b) => $a['id'] <=> $b['id']);
 
-        // getCollection applies checkPolicy('load') per row, so a source this
-        // user may not load never arrives. Counting separately is what lets the
-        // response distinguish "this site has one source" from "you may see one
-        // of six" -- the same distinction schema_list's note exists to keep.
+        // A source the user may not list was skipped above, and one whose
+        // class_key no longer resolves never arrives from getCollection at all.
+        // Counting separately is what lets the response distinguish "this site
+        // has one source" from "you may see one of six" -- the same distinction
+        // schema_list's note exists to keep.
         $total  = (int) $modx->getCount($this->mediaSourceClass(), $criteria);
         $shown  = count($sources);
         $hidden = max(0, $total - $shown);
@@ -153,9 +151,10 @@ final class MediaSourceListTool extends AbstractTool
         if ($hidden > 0) {
             $out['hidden'] = $hidden;
             $out['note']   = sprintf(
-                '%d further source(s) exist and are not shown. Either the MODX user this token '
-                . 'acts as has no load access to them, or their class_key names a class that is '
-                . 'no longer installed, in which case MODX cannot instantiate the row at all.',
+                '%d further source(s) exist and are not shown. Either an access policy gives the '
+                . 'MODX user this token acts as no list access to them, or their class_key names a '
+                . 'class that is no longer installed, in which case MODX cannot instantiate the row '
+                . 'at all.',
                 $hidden
             );
         }

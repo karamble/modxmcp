@@ -111,6 +111,13 @@ final class FileUploadTool extends AbstractTool
         $overwrite = !empty($arguments['overwrite']);
         $warnings  = [];
 
+        // Before the source is loaded or the target probed: whether a file
+        // exists is itself an answer.
+        $this->requireProcessorPermission($modx, 'Browser/File/Upload', ['source' => $sourceId]);
+        if ($overwrite) {
+            $this->requireProcessorPermission($modx, 'Browser/File/Remove', ['source' => $sourceId]);
+        }
+
         $path     = $this->normalisePath((string) $this->requireArg($arguments, 'path'));
         $filename = $this->validateFilename((string) $this->requireArg($arguments, 'filename'));
         $this->assertPathAllowed($modx, $path);

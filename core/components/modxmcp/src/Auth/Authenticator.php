@@ -12,9 +12,16 @@ use MODXMCP\Protocol\McpException;
  *
  * Two rules here are load-bearing and were established empirically in M0:
  *
- * 1. $_SESSION must already exist as a plain array before modX initializes.
- *    MODX then reports SESSION_STATE_EXTERNAL and never calls session_start(),
- *    so no cookie is issued and nothing is persisted.
+ * 1. MODX must have started a session itself before any permission is
+ *    checked. modAccessibleObject::checkPolicy() evaluates a policy only in
+ *    SESSION_STATE_INITIALIZED and answers yes in every other state. This rule
+ *    used to read the other way round: seed $_SESSION before modX initializes,
+ *    so MODX would report SESSION_STATE_EXTERNAL and issue no cookie. That
+ *    did avoid the cookie, and it also made every permission check on the
+ *    standalone route a yes. Bootstrap::settleSession() now lets MODX start
+ *    the session and destroys it before any output, so no cookie is issued and
+ *    nothing is persisted, and assertPermissionsEvaluable() refuses a request
+ *    where that did not happen.
  *
  * 2. modUser::addSessionContext() must never be used to grant permissions here.
  *    It is the interactive login path: it regenerates the session id and
@@ -52,8 +59,86 @@ final class Authenticator
         }
 
         $this->assertPolicyIsEnforced($modx, $user);
+        $this->reloadForeignContexts($modx);
 
         return $user;
+    }
+
+    /**
+     * Drop every cached context but the current one, so a tool that loads
+     * another gets it evaluated under the bound user.
+     *
+     * On the snippet route MODX's front controller has already loaded and
+     * cached the web context, while the request was still anonymous. modX::
+     * getContext() hands back a cached context without re-checking, and
+     * loading one in the first place is a checkPolicy('load') -- modContext is
+     * a modAccessibleObject, so getObject() returns null when the user may not
+     * load it. Resource/Create reads that as access_denied (Create.php:168).
+     * Left cached, the anonymous web context lets a bound user who may not load
+     * web create resources in it, which the Manager and the standalone route
+     * both refuse: on mcp.php nothing pre-loaded web, so the load check runs
+     * under the user and the create is refused. Clearing the cache here makes
+     * the snippet route do the same. The current context (mgr, just entered)
+     * is kept, since $modx->context points at it and the request runs in it.
+     *
+     * Reads are unaffected: they query by context_key and never load the
+     * context object for a policy.
+     */
+    private function reloadForeignContexts(modX $modx): void
+    {
+        $current = $this->contextKey($modx);
+        foreach (array_keys($modx->contexts) as $key) {
+            if ((string) $key !== (string) $current) {
+                unset($modx->contexts[$key]);
+            }
+        }
+    }
+
+    /**
+     * Refuse to act as a non-sudo user on a request where MODX would not
+     * evaluate its access policies.
+     *
+     * In any session state but SESSION_STATE_INITIALIZED,
+     * modAccessibleObject::checkPolicy() answers true without looking, so
+     * every hasPermission() a tool makes and every processor's
+     * checkPermissions() would be a yes. Bootstrap::settleSession() puts both
+     * routes in the right state. This is what makes a request that still is
+     * not fail closed rather than open.
+     *
+     * Sudo is exempt because its answer does not depend on the state:
+     * checkPolicy() returns true for sudo in every state.
+     *
+     * Deliberately not part of bindUser(). The in-process dev probes bind
+     * users under CLI, where MODX reports SESSION_STATE_UNAVAILABLE, and they
+     * must keep binding.
+     *
+     * @throws McpException
+     */
+    public function assertPermissionsEvaluable(modX $modx, modUser $user): void
+    {
+        if ($user->get('sudo')) {
+            return;
+        }
+
+        $state = $modx->getSessionState();
+        if ($state === modX::SESSION_STATE_INITIALIZED) {
+            return;
+        }
+
+        throw McpException::unavailable(sprintf(
+            'modxmcp will not act as the MODX user "%s" on this request: MODX reports session '
+            . 'state %d, and it evaluates access policies only in state %d (a session it started '
+            . 'itself). In any other state every permission check answers yes, so the request is '
+            . 'refused rather than served without them. The usual cause is the system setting '
+            . 'anonymous_sessions turned off while this endpoint is served through the snippet '
+            . 'resource: the front controller then starts no session and has already fixed the '
+            . 'state by the time modxmcp runs. Turn anonymous_sessions on (its default), or use '
+            . 'the standalone endpoint (assets/components/modxmcp/mcp.php), which starts its own '
+            . 'session. Nothing was read or written.',
+            (string) $user->get('username'),
+            $state,
+            modX::SESSION_STATE_INITIALIZED
+        ));
     }
 
     /**
@@ -106,16 +191,19 @@ final class Authenticator
      * Refuse to act as a user whose permissions are not actually enforced.
      *
      * A MODX user belonging to no user group has no access policy on the mgr
-     * context, and MODX treats "no policy" as unrestricted rather than as
-     * denied. Verified against stock MODX with modxmcp not loaded at all: such a
-     * user answers true to save_document AND true to an invented permission
-     * name, and successfully creates resources.
+     * context, and an account that is intentionally restricted is
+     * indistinguishable here from one that is simply misconfigured. modxmcp
+     * refuses both, because it cannot tell which was meant.
      *
-     * That inverts the intuition this extra's security story rests on. "The
-     * token can never do more than that user can do in the Manager" stays true,
-     * but for a groupless user the answer to "what can they do" is "everything".
-     * An administrator picking an ordinary-looking account for a least-privilege
-     * token would get the opposite of what they intended.
+     * An older comment here claimed such a user holds every permission. That
+     * was read off the bypass state this extra used to run in, where no policy
+     * was evaluated for anyone (see rule 1 in the class docblock). With
+     * policies evaluated, the opposite is true: the mgr context carries ACLs,
+     * the groupless user matches no principal in them, and
+     * modAccessibleObject::checkPolicy() falls through to deny. So the bind is
+     * refused here, and MODX would deny the user anyway; an administrator
+     * picking an ordinary-looking account for a least-privilege token gets a
+     * clear refusal at the first request rather than a surprise either way.
      *
      * The test is structural rather than behavioural. An earlier version probed
      * a random permission name and refused if it came back true, which was
@@ -144,10 +232,10 @@ final class Authenticator
 
         throw McpException::forbidden(sprintf(
             'The MODX user "%s" bound to this token belongs to no user group with an access '
-            . 'policy on the manager context. MODX treats that as unrestricted rather than as '
-            . 'denied, so the user holds every permission and the token would be more privileged '
-            . 'than an administrator account, not less. Add the user to a user group with an '
-            . 'access policy before using it for a token.',
+            . 'policy on the manager context, so modxmcp cannot act as it: an account with no '
+            . 'policy cannot be told apart from a misconfigured one, and MODX denies it in any '
+            . 'case once policies are evaluated. Add the user to a user group with an access '
+            . 'policy before using it for a token.',
             (string) $user->get('username')
         ));
     }

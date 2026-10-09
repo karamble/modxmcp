@@ -9,8 +9,10 @@ use MODX\Revolution\modX;
  *
  * This is the only thing standing between a token and every table on the site,
  * and that is worth being explicit about. The curated resource and element tools
- * write through MODX processors, which run their own checkPermissions() against
- * the bound user, so MODX's ACL applies. Generic access has no such backstop:
+ * ask MODX before they act -- reads through AbstractTool::requirePermission()
+ * and the object's own policy, writes through their processors'
+ * checkPermissions() -- so MODX's ACL applies. Generic access has no such
+ * backstop for an arbitrary class:
  * xPDO has no per-class permission model, so getCollection() on an arbitrary
  * class is simply a SELECT. Nothing below is defence in depth; it is the defence.
  *

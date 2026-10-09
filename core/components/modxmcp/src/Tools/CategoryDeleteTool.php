@@ -80,6 +80,11 @@ final class CategoryDeleteTool extends AbstractTool
         $id   = $this->arg($arguments, 'id');
         $name = $this->arg($arguments, 'name');
 
+        // Before anything is looked up: a refusal from here on names the
+        // elements a category holds, which is no business of a caller the
+        // processor would turn away.
+        $this->requireProcessorPermission($modx, 'Element/Category/Remove', $id !== null ? ['id' => (int) $id] : []);
+
         // Before the lookup, not after. getObject(modCategory::class, 0)
         // returns null, so a check further down would sit behind the
         // not-found refusal and never run -- which is how the dead warning

@@ -17,6 +17,19 @@ final class ToolRegistry
     /** @var array<string,ToolInterface> */
     private array $tools = [];
 
+    /**
+     * Register a tool, replacing any registered under the same name.
+     *
+     * Replacing is supported, not incidental: it is how a plugin on
+     * OnMCPRegisterTools wraps a built-in. Fetch the original with get(),
+     * register a wrapper that delegates to it under the same name, and the
+     * wrapper takes its place, in the same position in tools/list.
+     *
+     * A wrapper must delegate name(), definition() and requiredScope()
+     * together. call() validates arguments against the registered instance's
+     * definition()['inputSchema'] before invoking it, so a wrapper declaring
+     * no properties switches validation off for the tool it wraps.
+     */
     public function register(ToolInterface $tool): void
     {
         $this->tools[$tool->name()] = $tool;
@@ -25,6 +38,18 @@ final class ToolRegistry
     public function has(string $name): bool
     {
         return isset($this->tools[$name]);
+    }
+
+    /**
+     * The tool registered under a name, or null.
+     *
+     * For a plugin that wraps a built-in rather than replacing it outright.
+     * Null rather than an exception, so a plugin can offer to wrap an adapter's
+     * tool without first checking that its extra is installed.
+     */
+    public function get(string $name): ?ToolInterface
+    {
+        return $this->tools[$name] ?? null;
     }
 
     /**

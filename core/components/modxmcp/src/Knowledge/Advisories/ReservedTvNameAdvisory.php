@@ -73,6 +73,6 @@ final class ReservedTvNameAdvisory implements AdvisoryInterface
                     'the tvs argument of modxmcp_resource_create and modxmcp_resource_update',
                 ],
             ]
-        );
+        )->requiring('view_tv');
     }
 }

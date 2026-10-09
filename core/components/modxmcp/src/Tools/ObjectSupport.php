@@ -2,6 +2,12 @@
 
 namespace MODXMCP\Tools;
 
+use MODX\Revolution\modChunk;
+use MODX\Revolution\modPlugin;
+use MODX\Revolution\modResource;
+use MODX\Revolution\modSnippet;
+use MODX\Revolution\modTemplate;
+use MODX\Revolution\modTemplateVar;
 use MODX\Revolution\modX;
 use MODXMCP\Discovery\ClassGuard;
 use MODXMCP\Discovery\PackageScanner;
@@ -21,6 +27,35 @@ trait ObjectSupport
      *
      * @throws McpException
      */
+    /**
+     * The Manager permission a curated tool asks before reading rows of $class.
+     *
+     * Generic access has no MODX permission behind it as such -- xPDO has none
+     * -- but resources and elements are not generic. Allowlisting modResource
+     * must not make it readable to a user the resource tools would refuse, or
+     * the allowlist becomes a second door around the gate those tools apply.
+     */
+    protected function curatedReadPermission(string $class): ?string
+    {
+        if (is_a($class, modResource::class, true)) {
+            return 'view';
+        }
+        $elements = [
+            modChunk::class       => 'view_chunk',
+            modSnippet::class     => 'view_snippet',
+            modTemplate::class    => 'view_template',
+            modTemplateVar::class => 'view_tv',
+            modPlugin::class      => 'view_plugin',
+        ];
+        foreach ($elements as $elementClass => $permission) {
+            if (is_a($class, $elementClass, true)) {
+                return $permission;
+            }
+        }
+
+        return null;
+    }
+
     protected function guardedClass(modX $modx, string $class, string $operation): string
     {
         $scanner = new PackageScanner($modx);

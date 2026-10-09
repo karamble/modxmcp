@@ -213,15 +213,37 @@ trait TemplateVarSupport
     /**
      * Effective values for the TVs a given template declares, keyed by name.
      *
+     * $viewableOnly leaves out the TVs the Manager's resource form would not
+     * show this user (see tvIsViewable()). Reads pass it; writes must not. A
+     * write that dropped a TV from its resubmission would lose its value.
+     *
      * @return array<string,mixed>
      */
-    protected function readTvsForTemplate(modX $modx, int $resourceId, int $templateId): array
+    protected function readTvsForTemplate(modX $modx, int $resourceId, int $templateId, bool $viewableOnly = false): array
     {
         $values = [];
         foreach ($this->attachedTvs($modx, $templateId) as $name => $tv) {
+            if ($viewableOnly && !$this->tvIsViewable($tv)) {
+                continue;
+            }
             $values[$name] = $tv->getValue($resourceId);
         }
         return $values;
+    }
+
+    /**
+     * Whether the Manager's resource form would show this TV to the bound user.
+     *
+     * A TV can be assigned resource groups of its own, and the form skips it
+     * for a user in none of them
+     * (manager/controllers/default/resource/resource.class.php:365, through
+     * modTemplateVar::checkResourceGroupAccess()). That is separate from the
+     * TV's category policy, which xPDO has already applied when it loaded the
+     * TV. One query per TV, as the form pays.
+     */
+    protected function tvIsViewable(modTemplateVar $tv): bool
+    {
+        return $tv->checkResourceGroupAccess(null, 'mgr');
     }
 
     /**
@@ -307,10 +329,13 @@ trait TemplateVarSupport
      *
      * @return array<string,array<string,mixed>>
      */
-    protected function readTvState(modX $modx, int $resourceId, int $templateId): array
+    protected function readTvState(modX $modx, int $resourceId, int $templateId, bool $viewableOnly = false): array
     {
         $state = [];
         foreach ($this->attachedTvs($modx, $templateId) as $name => $tv) {
+            if ($viewableOnly && !$this->tvIsViewable($tv)) {
+                continue;
+            }
             $stored = $this->tvRowExists($modx, $resourceId, (int) $tv->get('id'));
             $state[$name] = [
                 'state'   => $stored ? 'stored' : 'default',

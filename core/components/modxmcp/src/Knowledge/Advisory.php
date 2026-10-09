@@ -44,6 +44,9 @@ final class Advisory
     /** @var array<string,mixed>|null */
     private ?array $extra = null;
 
+    /** MODX permission a caller must hold to be shown this advisory, if any. */
+    private ?string $requires = null;
+
     /**
      * @param array<string,mixed> $detected
      * @param array<string,mixed> $rule
@@ -98,6 +101,22 @@ final class Advisory
         return $clone;
     }
 
+    /**
+     * Immutable: the MODX permission a caller must hold to be shown this.
+     *
+     * For an advisory whose evidence is itself something the Manager gates --
+     * resource rows, template variable names, package versions. site_info
+     * withholds it from a caller without the permission and strips the key
+     * before answering, so a caller who holds it sees what it always saw.
+     */
+    public function requiring(string $permission): self
+    {
+        $clone           = clone $this;
+        $clone->requires = $permission;
+
+        return $clone;
+    }
+
     public function id(): string
     {
         return $this->id;
@@ -121,6 +140,9 @@ final class Advisory
 
         if ($this->extra !== null) {
             $out['extra'] = $this->extra;
+        }
+        if ($this->requires !== null) {
+            $out['requires'] = $this->requires;
         }
 
         return $out;

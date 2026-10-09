@@ -90,7 +90,8 @@ final class Server
                 $this->transport->header('Authorization'),
                 $this->clientIp()
             );
-            $this->auth->bindUser($this->modx, (int) $token->get('user_id'));
+            $user = $this->auth->bindUser($this->modx, (int) $token->get('user_id'));
+            $this->auth->assertPermissionsEvaluable($this->modx, $user);
 
             // This revision defines no client-to-server notifications over
             // Streamable HTTP, but the transport rule stands: an accepted

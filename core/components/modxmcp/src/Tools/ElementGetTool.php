@@ -39,7 +39,12 @@ final class ElementGetTool extends AbstractTool
 
     public function call(modX $modx, array $arguments): array
     {
-        $type = $this->elementType((string) $this->requireArg($arguments, 'type'));
+        $typeKey = strtolower(trim((string) $this->requireArg($arguments, 'type')));
+        $type    = $this->elementType($typeKey);
+
+        // What MODX's own Element/<Type>/Get declares. Before the lookup, so a
+        // user without it cannot tell an existing name from a missing one.
+        $this->requirePermission($modx, 'view a ' . $this->elementNoun($typeKey), [$type['permission']]);
 
         $id   = $this->arg($arguments, 'id');
         $name = $this->arg($arguments, 'name');
@@ -54,11 +59,19 @@ final class ElementGetTool extends AbstractTool
 
         if (!$element) {
             $which = $id !== null ? "id {$id}" : "name '{$name}'";
-            throw McpException::invalidParams("No {$arguments['type']} with {$which}");
+            throw McpException::invalidParams("No {$typeKey} with {$which}");
         }
 
+        // The object policy GetProcessor applies before returning the row: an
+        // element in a category can refuse a user who holds view_<type>. Before
+        // the body, the default properties or the bindings are assembled.
+        $this->requirePolicy($modx, $element, 'view', sprintf(
+            "%s '%s'",
+            $this->elementNoun($typeKey),
+            (string) $element->get($type['name'])
+        ));
+
         $out = $this->normaliseElement($element->toArray(), $type, true);
-        $typeKey = strtolower((string) $arguments['type']);
         $out['type'] = $typeKey;
 
         // Bindings live in their own tables and decide whether the element does

@@ -49,6 +49,13 @@ final class CategorySaveTool extends AbstractTool
         $id   = $this->arg($arguments, 'id');
         $name = $this->arg($arguments, 'name');
 
+        // Create and Update both declare save_category.
+        $this->requireProcessorPermission(
+            $modx,
+            $id !== null ? 'Element/Category/Update' : 'Element/Category/Create',
+            $id !== null ? ['id' => (int) $id] : []
+        );
+
         $existing = $id !== null ? $modx->getObject(modCategory::class, (int) $id) : null;
         if ($id !== null && !$existing) {
             throw McpException::invalidParams("No category with id {$id}");

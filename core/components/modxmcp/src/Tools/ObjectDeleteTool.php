@@ -2,6 +2,7 @@
 
 namespace MODXMCP\Tools;
 
+use MODX\Revolution\modAccessibleObject;
 use MODX\Revolution\modX;
 use MODXMCP\Protocol\McpException;
 use MODXMCP\Registry\Schema;
@@ -63,6 +64,12 @@ final class ObjectDeleteTool extends AbstractTool
 
         // Returned so the deleted content survives in the transcript, which is
         // the only recovery path this operation has.
+        // What RemoveProcessor checks; modAccessibleObject::remove() only
+        // records a denial and removes anyway.
+        if ($object instanceof modAccessibleObject) {
+            $this->requirePolicy($modx, $object, 'remove', "{$class} '{$pk}'");
+        }
+
         $removed = $this->redactRow($modx, $object->toArray());
 
         if (!$object->remove()) {

@@ -49,7 +49,7 @@ final class SeoSuiteSitemapAdvisory implements AdvisoryInterface
                 . 'resource is missing from sitemap.xml could not be checked.',
                 ['orphan_count' => null, 'checked_class' => self::MODEL],
                 ['require' => 'write through the processor-backed resource tools'],
-            )->withExtra('seosuite', $presence->version('SEO Suite'));
+            )->withExtra('seosuite', $presence->version('SEO Suite'))->requiring('view');
         }
 
         $registered = [];
@@ -85,7 +85,7 @@ final class SeoSuiteSitemapAdvisory implements AdvisoryInterface
                 . 'silently missing from sitemap.xml.',
                 ['orphan_count' => 0, 'checked_class' => self::MODEL],
                 $rule
-            )->withExtra('seosuite', $presence->version('SEO Suite'));
+            )->withExtra('seosuite', $presence->version('SEO Suite'))->requiring('view');
         }
 
         $rule['remediation'] = 're-save each listed resource with modxmcp_resource_update';
@@ -106,6 +106,6 @@ final class SeoSuiteSitemapAdvisory implements AdvisoryInterface
                 'check'               => 'published=1 AND deleted=0 AND searchable=1 with no companion row',
             ],
             $rule
-        )->withExtra('seosuite', $presence->version('SEO Suite'));
+        )->withExtra('seosuite', $presence->version('SEO Suite'))->requiring('view');
     }
 }
